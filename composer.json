@@ -16,13 +16,16 @@
     "require-dev": {
         "pestphp/pest": "^4.0"
     },
+    "suggest": {
+        "pestphp/pest": "Required for the Pest expectations (toHavePushed, toHaveSent, ...); the fakes and their assert*() methods work without it"
+    },
+    "conflict": {
+        "pestphp/pest": "<4.0"
+    },
     "autoload": {
         "psr-4": {
             "Marko\\Testing\\": "src/"
-        },
-        "files": [
-            "src/Pest/Expectations.php"
-        ]
+        }
     },
     "autoload-dev": {
         "psr-4": {
@@ -37,6 +40,11 @@
     "extra": {
         "marko": {
             "module": true
+        },
+        "pest": {
+            "plugins": [
+                "Marko\\Testing\\Pest\\ExpectationsPlugin"
+            ]
         }
     }
 }

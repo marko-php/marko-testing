@@ -240,7 +240,7 @@ KnownDriversValidator::assertSkeletonSuggestContainsAll(
 
 ## Pest Expectations
 
-`marko/testing` ships Pest custom expectations that are auto-loaded via `autoload.files`.
+`marko/testing` ships Pest custom expectations. They register automatically through a Pest plugin (`extra.pest.plugins`), so `Pest.php` needs no `require`. Pest 4 is required for the expectations; the fakes and their `assert*()` methods work without it.
 
 ```php
 use Marko\Testing\Fake\FakeEventDispatcher;
