@@ -97,3 +97,11 @@ it('creates assertion for unexpected guest', function (): void {
     expect($exception)->toBeInstanceOf(AssertionFailedException::class)
         ->and($exception->getMessage())->toBe('Expected user to be a guest but a user is authenticated.');
 });
+
+it('creates a stray request exception naming the method and url', function (): void {
+    $exception = AssertionFailedException::strayRequest('POST', 'https://api.example.com/orders');
+
+    expect($exception)->toBeInstanceOf(AssertionFailedException::class)
+        ->and($exception->getMessage())->toContain('POST https://api.example.com/orders')
+        ->and($exception->getSuggestion())->toContain('stub(');
+});

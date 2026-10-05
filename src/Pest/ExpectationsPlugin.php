@@ -8,9 +8,11 @@ use InvalidArgumentException;
 use Marko\Log\LogLevel;
 use Marko\Testing\Fake\FakeEventDispatcher;
 use Marko\Testing\Fake\FakeGuard;
+use Marko\Testing\Fake\FakeHttpClient;
 use Marko\Testing\Fake\FakeLogger;
 use Marko\Testing\Fake\FakeMailer;
 use Marko\Testing\Fake\FakeQueue;
+use Marko\Testing\Fake\Http\RecordedRequest;
 use Pest\Contracts\Plugins\Bootable;
 use Pest\Expectation;
 use PHPUnit\Framework\Assert;
@@ -80,6 +82,33 @@ class ExpectationsPlugin implements Bootable
                 Assert::assertTrue(
                     $found,
                     'Expected a message matching the callback to be sent but none matched.',
+                );
+            }
+
+            return $this;
+        });
+
+        expect()->extend('toHaveSentRequest', function (
+            ?callable $callback = null,
+        ): Expectation {
+            $fake = $this->value;
+
+            if (! $fake instanceof FakeHttpClient) {
+                throw new InvalidArgumentException(
+                    'Expected FakeHttpClient, got ' . get_debug_type($fake),
+                );
+            }
+
+            if ($callback === null) {
+                Assert::assertTrue(
+                    $fake->requests !== [],
+                    'Expected at least one HTTP request to be sent but none were.',
+                );
+            } else {
+                $found = array_any($fake->requests, fn (RecordedRequest $request) => $callback($request));
+                Assert::assertTrue(
+                    $found,
+                    'Expected an HTTP request matching the callback to be sent but none matched.',
                 );
             }
 

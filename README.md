@@ -28,7 +28,7 @@ After that, every Pest test in the project can reference module and app classes 
 
 ## Available Fakes
 
-`FakeEventDispatcher`, `FakeMailer`, `FakeQueue`, `FakeSession`, `FakeCookieJar`, `FakeLogger`, `FakeConfigRepository`, `FakeAuthenticatable`, `FakeUserProvider`, `FakeGuard`
+`FakeEventDispatcher`, `FakeMailer`, `FakeQueue`, `FakeSession`, `FakeCookieJar`, `FakeLogger`, `FakeConfigRepository`, `FakeAuthenticatable`, `FakeUserProvider`, `FakeGuard`, `FakeHttpClient`
 
 
 ## Usage
@@ -168,6 +168,23 @@ $guard->assertGuest();
 $guard->assertLoggedOut();
 ```
 
+### FakeHttpClient
+
+```php
+use Marko\Http\HttpResponse;
+use Marko\Testing\Fake\FakeHttpClient;
+use Marko\Testing\Fake\Http\RecordedRequest;
+
+$http = new FakeHttpClient();
+$http->stub('https://api.example.com/orders/*', new HttpResponse(200, '{"id":1}'));
+
+$service = new OrderSync($http);
+$service->push($order);
+
+$http->assertSent(fn (RecordedRequest $r) => $r->method === 'POST');
+$http->assertSentCount(1);
+```
+
 ### KnownDriversValidator
 
 ```php
@@ -233,6 +250,13 @@ KnownDriversValidator::assertSkeletonSuggestContainsAll(
 - `assertNotAttempted(): void` — Assert attempt() was never called
 - `assertLoggedOut(): void` — Assert logout() was called
 
+### FakeHttpClient
+
+- `stub(string $urlPattern, HttpResponse|HttpException $response): self` — Respond to matching URLs (`*` wildcard)
+- `queue(HttpResponse|HttpException ...$responses): self` — Sequential responses for unmatched URLs
+- `preventStrayRequests(bool $prevent = true): self` — Throw on unmatched requests (default on)
+- `assertSent(?callable $callback = null): void`, `assertNotSent(callable $callback): void`, `assertSentCount(int $expected): void`, `assertNothingSent(): void`
+
 ### KnownDriversValidator
 
 - `assertDocsUrlsResolveToValidPattern(string $knownDriversPath): void` — Assert every key in `known-drivers.php` follows the `marko/*` prefix pattern
@@ -266,6 +290,9 @@ expect($logger)->toHaveLogged('User logged in');
 expect($guard)->toHaveAttempted();
 expect($guard)->toHaveAttempted(fn ($creds) => $creds['email'] === 'user@example.com');
 expect($guard)->toBeAuthenticated();
+
+// FakeHttpClient
+expect($http)->toHaveSentRequest(fn ($request) => $request->method === 'POST');
 ```
 
 ## Documentation

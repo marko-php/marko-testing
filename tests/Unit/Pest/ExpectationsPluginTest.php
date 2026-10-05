@@ -9,6 +9,7 @@ use Pest\Expectation;
 const MARKO_TESTING_EXPECTATIONS = [
     'toHaveDispatched',
     'toHaveSent',
+    'toHaveSentRequest',
     'toHavePushed',
     'toHaveLogged',
     'toHaveAttempted',

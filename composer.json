@@ -11,7 +11,8 @@
         "marko/queue": "self.version",
         "marko/session": "self.version",
         "marko/log": "self.version",
-        "marko/authentication": "self.version"
+        "marko/authentication": "self.version",
+        "marko/http": "self.version"
     },
     "require-dev": {
         "pestphp/pest": "^4.0"

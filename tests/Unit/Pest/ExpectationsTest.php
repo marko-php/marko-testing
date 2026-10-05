@@ -6,9 +6,12 @@ use Marko\Core\Event\Event;
 use Marko\Mail\Message;
 use Marko\Queue\Job;
 use Marko\Testing\Fake\FakeEventDispatcher;
+use Marko\Testing\Fake\FakeHttpClient;
 use Marko\Testing\Fake\FakeLogger;
 use Marko\Testing\Fake\FakeMailer;
 use Marko\Testing\Fake\FakeQueue;
+use Marko\Testing\Fake\Http\RecordedRequest;
+use PHPUnit\Framework\ExpectationFailedException;
 
 it('registers toHaveDispatched expectation for FakeEventDispatcher', function () {
     $dispatcher = new FakeEventDispatcher();
@@ -63,6 +66,39 @@ it('provides negated expectations (not->toHaveDispatched, etc.)', function () {
         ->and($mailer)->not->toHaveSent()
         ->and($logger)->not->toHaveLogged('Nothing logged')
         ->and($queue)->not->toHavePushed($job::class);
+});
+
+it('registers toHaveSentRequest expectation for FakeHttpClient', function () {
+    $http = new FakeHttpClient();
+    $http->preventStrayRequests(false);
+
+    expect($http)->not->toHaveSentRequest();
+
+    $http->get('https://api.example.com/orders');
+
+    expect($http)->toHaveSentRequest();
+});
+
+it('matches toHaveSentRequest against a callback', function () {
+    $http = new FakeHttpClient();
+    $http->preventStrayRequests(false);
+
+    $http->post('https://api.example.com/orders', ['json' => ['id' => 1]]);
+
+    expect($http)->toHaveSentRequest(fn (RecordedRequest $r) => $r->method === 'POST' && $r->json()['id'] === 1)
+        ->not->toHaveSentRequest(fn (RecordedRequest $r) => $r->method === 'DELETE');
+});
+
+it('fails toHaveSentRequest when no request matches', function () {
+    $http = new FakeHttpClient();
+
+    expect(fn () => expect($http)->toHaveSentRequest())
+        ->toThrow(ExpectationFailedException::class, 'Expected at least one HTTP request to be sent');
+});
+
+it('throws clear error when toHaveSentRequest is used on wrong type', function () {
+    expect(fn () => expect(new stdClass())->toHaveSentRequest())
+        ->toThrow(InvalidArgumentException::class, 'Expected FakeHttpClient');
 });
 
 it('throws clear error when expectation used on wrong type', function () {

@@ -36,6 +36,12 @@ it(
     },
 );
 
+it('requires marko/http as a dependency', function () {
+    $composer = json_decode(file_get_contents(dirname(__DIR__) . '/composer.json'), true);
+
+    expect($composer['require'])->toHaveKey('marko/http');
+});
+
 it('has a module.php with correct module configuration', function () {
     $modulePath = dirname(__DIR__) . '/module.php';
 

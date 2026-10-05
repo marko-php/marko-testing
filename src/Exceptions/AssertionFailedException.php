@@ -91,6 +91,18 @@ class AssertionFailedException extends MarkoException
         );
     }
 
+    public static function strayRequest(
+        string $method,
+        string $url,
+    ): self {
+        return new self(
+            message: "Unexpected HTTP request: $method $url",
+            context: 'FakeHttpClient has no stub matching this URL and no queued response left.',
+            suggestion: 'Register a response with stub($urlPattern, $response) or queue($response), '
+                . 'or call preventStrayRequests(false) to allow unmatched requests.',
+        );
+    }
+
     public static function unexpectedGuest(): self
     {
         return new self(
