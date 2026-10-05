@@ -1,0 +1,14 @@
+{
+    "name": "marko/authentication",
+    "description": "Fixture stub for marko/authentication used by the marko/testing HTTP test client fixture",
+    "type": "marko-module",
+    "license": "MIT",
+    "require": {
+        "marko/session": "self.version"
+    },
+    "extra": {
+        "marko": {
+            "module": true
+        }
+    }
+}

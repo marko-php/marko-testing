@@ -1,6 +1,6 @@
 # marko/testing
 
-Testing utilities for Marko---reusable fakes with built-in assertions that eliminate test boilerplate.
+Testing utilities for Marko---reusable fakes with built-in assertions, and an in-process HTTP test client for feature tests.
 
 ## Overview
 
@@ -25,6 +25,24 @@ uses(TestCase::class)->in(__DIR__);
 ```
 
 After that, every Pest test in the project can reference module and app classes directly---no additional Composer path repos or classmaps required.
+
+## HTTP Tests
+
+`TestClient` sends requests through your application in process (real router, middleware and controllers) and boots the application once for many requests:
+
+```php
+use Marko\Testing\Http\TestClient;
+
+$client = TestClient::boot(dirname(__DIR__));
+
+$client->postJson('/api/shows/42/events', ['type' => 'view'])
+    ->assertStatus(202)
+    ->assertJsonPath('data.type', 'view');
+
+$client->actingAs($user)->get('/dashboard')->assertOk();
+```
+
+Cookies persist across requests like a browser's, so session-backed flows work. Assertions on the returned `TestResponse` throw `AssertionFailedException` with the status and a body excerpt. See the [HTTP tests docs](https://marko.build/docs/packages/testing/#http-tests).
 
 ## Available Fakes
 
@@ -257,6 +275,19 @@ KnownDriversValidator::assertSkeletonSuggestContainsAll(
 - `preventStrayRequests(bool $prevent = true): self` — Throw on unmatched requests (default on)
 - `assertSent(?callable $callback = null): void`, `assertNotSent(callable $callback): void`, `assertSentCount(int $expected): void`, `assertNothingSent(): void`
 
+### TestClient
+
+- `TestClient::boot(string $basePath): self`, `TestClient::forApplication(Application $app): self` — Boot once, serve many requests
+- `get()`, `post()`, `put()`, `patch()`, `delete()`, `options()`, `head()`, `getJson()`, `postJson()`, `putJson()`, `patchJson()`, `deleteJson()`, `call()` — Send a request, return a `TestResponse`
+- `withHeaders()`, `withServerVariables()`, `withCookie()`, `withoutCookies()`, `withFile()`, `actingAs($user, ?string $guard = null)` — Client state for later requests
+
+### TestResponse
+
+- `assertStatus()`, `assertOk()`, `assertCreated()`, `assertNoContent()`, `assertNotFound()`, `assertForbidden()`, `assertUnauthorized()`, `assertUnprocessable()`, `assertRedirect(?string $to = null)`
+- `assertHeader()`, `assertHeaderMissing()`, `assertCookie()`, `assertCookieMissing()`, `assertSee()`, `assertDontSee()`
+- `assertJson()`, `assertExactJson()`, `assertJsonPath()`, `assertJsonCount()`, `assertJsonMissingPath()`
+- `status()`, `body()`, `header()`, `json()`, `response()`
+
 ### KnownDriversValidator
 
 - `assertDocsUrlsResolveToValidPattern(string $knownDriversPath): void` — Assert every key in `known-drivers.php` follows the `marko/*` prefix pattern
@@ -293,6 +324,10 @@ expect($guard)->toBeAuthenticated();
 
 // FakeHttpClient
 expect($http)->toHaveSentRequest(fn ($request) => $request->method === 'POST');
+
+// TestResponse
+expect($response)->toHaveStatus(201);
+expect($response)->toHaveJsonPath('data.status', 'live');
 ```
 
 ## Documentation

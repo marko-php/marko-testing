@@ -1,0 +1,14 @@
+{
+    "name": "marko/session",
+    "description": "Fixture stub for marko/session used by the marko/testing HTTP test client fixture",
+    "type": "marko-module",
+    "license": "MIT",
+    "require": {
+        "marko/config": "self.version"
+    },
+    "extra": {
+        "marko": {
+            "module": true
+        }
+    }
+}

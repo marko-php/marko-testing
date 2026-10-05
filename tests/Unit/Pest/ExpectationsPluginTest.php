@@ -15,6 +15,8 @@ const MARKO_TESTING_EXPECTATIONS = [
     'toHaveLogged',
     'toHaveAttempted',
     'toBeAuthenticated',
+    'toHaveStatus',
+    'toHaveJsonPath',
 ];
 
 /**

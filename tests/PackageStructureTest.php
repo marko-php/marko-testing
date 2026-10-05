@@ -42,6 +42,12 @@ it('requires marko/http as a dependency', function () {
     expect($composer['require'])->toHaveKey('marko/http');
 });
 
+it('requires marko/routing for the HTTP test client', function () {
+    $composer = json_decode(file_get_contents(dirname(__DIR__) . '/composer.json'), true);
+
+    expect($composer['require'])->toHaveKey('marko/routing');
+});
+
 it('has a module.php with correct module configuration', function () {
     $modulePath = dirname(__DIR__) . '/module.php';
 

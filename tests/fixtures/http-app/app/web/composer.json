@@ -1,0 +1,16 @@
+{
+    "name": "fixture/web",
+    "description": "Fixture app module with the routes the TestClient tests drive",
+    "type": "marko-module",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Marko\\Testing\\Tests\\HttpApp\\": "src/"
+        }
+    },
+    "extra": {
+        "marko": {
+            "module": true
+        }
+    }
+}

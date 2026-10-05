@@ -103,6 +103,36 @@ class AssertionFailedException extends MarkoException
         );
     }
 
+    /**
+     * A TestResponse assertion failed. The message carries the response status and the
+     * start of the body, so the failure explains itself without a debugger.
+     */
+    public static function responseAssertion(
+        string $expectation,
+        int $status,
+        string $body,
+    ): self {
+        $excerpt = self::bodyExcerpt($body);
+
+        return new self(
+            message: "$expectation\n\nResponse status: $status\nResponse body: $excerpt",
+            context: "Response status: $status",
+            suggestion: 'Check the route, its middleware and the controller for the request that produced this response.',
+        );
+    }
+
+    public static function invalidJsonResponse(
+        int $status,
+        string $body,
+        string $error,
+    ): self {
+        return self::responseAssertion(
+            "Expected the response body to be valid JSON but decoding failed: $error.",
+            $status,
+            $body,
+        );
+    }
+
     public static function unexpectedGuest(): self
     {
         return new self(
@@ -110,5 +140,21 @@ class AssertionFailedException extends MarkoException
             context: 'Guard has an authenticated user.',
             suggestion: 'Call logout() or setUser(null) before asserting guest state.',
         );
+    }
+
+    private static function bodyExcerpt(
+        string $body,
+    ): string {
+        $limit = 500;
+
+        if ($body === '') {
+            return '(empty)';
+        }
+
+        if (strlen($body) <= $limit) {
+            return $body;
+        }
+
+        return substr($body, 0, $limit) . '... (' . (strlen($body) - $limit) . ' more bytes)';
     }
 }

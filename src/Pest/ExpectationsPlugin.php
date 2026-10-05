@@ -7,6 +7,7 @@ namespace Marko\Testing\Pest;
 use InvalidArgumentException;
 use Marko\Broadcasting\Channel;
 use Marko\Log\LogLevel;
+use Marko\Testing\Exceptions\AssertionFailedException;
 use Marko\Testing\Fake\FakeBroadcaster;
 use Marko\Testing\Fake\FakeEventDispatcher;
 use Marko\Testing\Fake\FakeGuard;
@@ -15,6 +16,7 @@ use Marko\Testing\Fake\FakeLogger;
 use Marko\Testing\Fake\FakeMailer;
 use Marko\Testing\Fake\FakeQueue;
 use Marko\Testing\Fake\Http\RecordedRequest;
+use Marko\Testing\Http\TestResponse;
 use Pest\Contracts\Plugins\Bootable;
 use Pest\Expectation;
 use PHPUnit\Framework\Assert;
@@ -225,6 +227,47 @@ class ExpectationsPlugin implements Bootable
                     $found,
                     'Expected an authentication attempt matching the callback but none matched.',
                 );
+            }
+
+            return $this;
+        });
+
+        expect()->extend('toHaveStatus', function (
+            int $status,
+        ): Expectation {
+            $response = $this->value;
+
+            if (! $response instanceof TestResponse) {
+                throw new InvalidArgumentException(
+                    'Expected TestResponse, got ' . get_debug_type($response),
+                );
+            }
+
+            try {
+                $response->assertStatus($status);
+            } catch (AssertionFailedException $e) {
+                Assert::fail($e->getMessage());
+            }
+
+            return $this;
+        });
+
+        expect()->extend('toHaveJsonPath', function (
+            string $path,
+            mixed $expected,
+        ): Expectation {
+            $response = $this->value;
+
+            if (! $response instanceof TestResponse) {
+                throw new InvalidArgumentException(
+                    'Expected TestResponse, got ' . get_debug_type($response),
+                );
+            }
+
+            try {
+                $response->assertJsonPath($path, $expected);
+            } catch (AssertionFailedException $e) {
+                Assert::fail($e->getMessage());
             }
 
             return $this;
