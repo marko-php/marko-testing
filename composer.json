@@ -12,7 +12,8 @@
         "marko/session": "self.version",
         "marko/log": "self.version",
         "marko/authentication": "self.version",
-        "marko/http": "self.version"
+        "marko/http": "self.version",
+        "psr/clock": "^1.0"
     },
     "require-dev": {
         "pestphp/pest": "^4.0"
