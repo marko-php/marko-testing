@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Marko\Testing\Pest;
 
 use InvalidArgumentException;
+use Marko\Broadcasting\Channel;
 use Marko\Log\LogLevel;
+use Marko\Testing\Fake\FakeBroadcaster;
 use Marko\Testing\Fake\FakeEventDispatcher;
 use Marko\Testing\Fake\FakeGuard;
 use Marko\Testing\Fake\FakeHttpClient;
@@ -167,6 +169,34 @@ class ExpectationsPlugin implements Bootable
             Assert::assertTrue(
                 $found,
                 "Expected message \"$message\" to be logged but it was not.",
+            );
+
+            return $this;
+        });
+
+        expect()->extend('toHaveBroadcast', function (
+            string|Channel $channel,
+            string $event,
+            ?callable $callback = null,
+        ): Expectation {
+            $fake = $this->value;
+
+            if (! $fake instanceof FakeBroadcaster) {
+                throw new InvalidArgumentException(
+                    'Expected FakeBroadcaster, got ' . get_debug_type($fake),
+                );
+            }
+
+            $matches = $fake->broadcastsOf($channel, $event);
+
+            if ($callback !== null) {
+                $matches = array_filter($matches, fn (array $entry) => $callback($entry['data'], $entry['id']));
+            }
+
+            $name = $channel instanceof Channel ? $channel->name : $channel;
+            Assert::assertNotEmpty(
+                $matches,
+                "Expected $event to be broadcast on channel $name but it was not.",
             );
 
             return $this;

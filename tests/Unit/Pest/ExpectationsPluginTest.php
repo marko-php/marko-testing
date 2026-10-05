@@ -8,6 +8,7 @@ use Pest\Expectation;
 
 const MARKO_TESTING_EXPECTATIONS = [
     'toHaveDispatched',
+    'toHaveBroadcast',
     'toHaveSent',
     'toHaveSentRequest',
     'toHavePushed',
