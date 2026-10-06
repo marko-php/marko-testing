@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Marko\Testing\Http;
 
+use Closure;
 use finfo;
 use JsonException;
 use Marko\Authentication\AuthenticatableInterface;
@@ -50,6 +51,10 @@ use RuntimeException;
  * server variables, the cookie jar and actingAs() apply to every later request
  * on the same client. withFile() applies to the next request only.
  *
+ * The cookie jar scopes cookies like a browser (RFC 6265): a request carries
+ * only the cookies whose path and domain match it, and Secure cookies only
+ * over HTTPS. Requests go to `localhost` unless the URI names a host.
+ *
  * An exception thrown by a controller or middleware propagates out of the call,
  * so the test shows the real stack trace. HTTP exceptions
  * (HttpExceptionInterface) are already rendered into a response by the router
@@ -67,10 +72,10 @@ class TestClient
     /** @var array<string, string> */
     private array $serverVariables = [];
 
-    /** @var array<string, string> Cookie name => value */
+    /** @var array<string, JarCookie> Keyed by name, domain and path, in creation order */
     private array $cookies = [];
 
-    /** @var array<string, UploadedFile> */
+    /** @var array<string, UploadedFile|array<mixed>> Keyed like the form fields, nested as PHP nests $_FILES */
     private array $files = [];
 
     /** @var list<ResettableInterface> */
@@ -144,18 +149,32 @@ class TestClient
     }
 
     /**
-     * Put a cookie in the jar; it is sent with every later request.
+     * Put a cookie in the jar. With the defaults it is sent with every later request,
+     * to any host. A $path limits it to requests on or below that path, a $domain to
+     * that domain and its subdomains, and $secure to HTTPS requests.
      */
     public function withCookie(
         string $name,
         string $value,
+        string $path = '/',
+        ?string $domain = null,
+        bool $secure = false,
     ): static {
-        $this->cookies[$name] = $value;
+        $domain = $domain === null ? null : self::normalizeDomain($domain);
+        $this->cookies[self::cookieKey($name, $domain, $path)] = new JarCookie(
+            name: $name,
+            value: $value,
+            domain: $domain,
+            path: $path,
+            secure: $secure,
+        );
 
         return $this;
     }
 
     /**
+     * Put several cookies in the jar, each sent with every later request.
+     *
      * @param array<string, string> $cookies
      */
     public function withCookies(
@@ -196,19 +215,42 @@ class TestClient
     }
 
     /**
-     * The cookie jar: cookies set by earlier responses or withCookie(), sent with the next request.
-     * Cookies are keyed by name only; domain and path are not matched.
+     * The cookies in the jar whose path is `/`, as name => value: the ones a request to `/`
+     * carries, whatever the host or scheme. Use cookieJar() for path-scoped cookies.
      *
      * @return array<string, string>
      */
     public function cookies(): array
     {
-        return $this->cookies;
+        $cookies = [];
+
+        foreach ($this->cookies as $cookie) {
+            if ($cookie->path === '/') {
+                $cookies[$cookie->name] ??= $cookie->value;
+            }
+        }
+
+        return $cookies;
+    }
+
+    /**
+     * Every cookie in the jar with its domain, path and Secure flag, in creation order.
+     *
+     * @return list<JarCookie>
+     */
+    public function cookieJar(): array
+    {
+        return array_values($this->cookies);
     }
 
     /**
      * Upload a file with the next request, as the form field $field. The file is copied
      * first, so the controller can move the upload without touching the original.
+     *
+     * $field uses HTML form notation, and the controller sees the same nested shape
+     * PHP builds from $_FILES: `photos[]` appends one more file to the `photos` list,
+     * and `documents[passport]` nests the file under `documents`. A plain field such
+     * as `avatar` holds one file; uploading to it twice throws.
      *
      * @throws TestClientException
      */
@@ -218,19 +260,47 @@ class TestClient
         ?string $clientFilename = null,
         ?string $clientMediaType = null,
     ): static {
+        $segments = self::uploadFieldSegments($field);
+
         if (!is_file($path) || !is_readable($path)) {
             throw TestClientException::unreadableUpload($path);
         }
 
-        $copy = (string) tempnam(sys_get_temp_dir(), 'marko-test-upload-');
-        copy($path, $copy);
+        $this->files = self::placeUpload($this->files, $segments, $field, static function () use (
+            $path,
+            $clientFilename,
+            $clientMediaType,
+        ): UploadedFile {
+            $copy = (string) tempnam(sys_get_temp_dir(), 'marko-test-upload-');
+            copy($path, $copy);
 
-        $this->files[$field] = new UploadedFile(
-            tempPath: $copy,
-            clientFilename: $clientFilename ?? basename($path),
-            clientMediaType: $clientMediaType ?? (string) new finfo(FILEINFO_MIME_TYPE)->file($copy),
-            size: (int) filesize($copy),
-        );
+            return new UploadedFile(
+                tempPath: $copy,
+                clientFilename: $clientFilename ?? basename($path),
+                clientMediaType: $clientMediaType ?? (string) new finfo(FILEINFO_MIME_TYPE)->file($copy),
+                size: (int) filesize($copy),
+            );
+        });
+
+        return $this;
+    }
+
+    /**
+     * Upload several files with the next request as the list field $field (`photos`
+     * or `photos[]`), in order: the same as one withFile('photos[]', ...) per path.
+     *
+     * @param list<string> $paths
+     * @throws TestClientException
+     */
+    public function withFiles(
+        string $field,
+        array $paths,
+    ): static {
+        $listField = str_ends_with($field, '[]') ? $field : $field . '[]';
+
+        foreach ($paths as $path) {
+            $this->withFile($listField, $path);
+        }
 
         return $this;
     }
@@ -471,14 +541,14 @@ class TestClient
             $this->resetter->reset(...$this->preserved);
             $response = $this->application->router->handle($request);
         } finally {
-            foreach ($files as $file) {
-                if (is_file($file->tempPath())) {
+            array_walk_recursive($files, static function (mixed $file): void {
+                if ($file instanceof UploadedFile && is_file($file->tempPath())) {
                     unlink($file->tempPath());
                 }
-            }
+            });
         }
 
-        $this->storeCookies($response);
+        $this->storeCookies($response, $request);
 
         return new TestResponse($response);
     }
@@ -550,28 +620,83 @@ class TestClient
             $server['CONTENT_LENGTH'] = (string) strlen($body);
         }
 
-        if ($this->cookies !== []) {
-            $server['HTTP_COOKIE'] = implode('; ', array_map(
-                static fn (string $name, string $value): string => $name . '=' . rawurlencode($value),
-                array_keys($this->cookies),
-                $this->cookies,
-            ));
-        }
-
         foreach ($headers as $name => $value) {
             $server[self::headerServerKey($name)] = $value;
         }
 
         $server = [...$server, ...$this->headersNotOverridden($headers), ...$this->serverVariables];
+        $cookies = $this->cookiesFor(self::requestHost($server), $path, self::isSecureRequest($server));
+        $requestCookies = [];
+
+        foreach ($cookies as $cookie) {
+            // Like PHP's $_COOKIE, the first (most specific) cookie of a name wins.
+            $requestCookies[$cookie->name] ??= $cookie->value;
+        }
+
+        if ($cookies !== [] && !array_key_exists('HTTP_COOKIE', $server)) {
+            $server['HTTP_COOKIE'] = implode('; ', array_map(
+                static fn (JarCookie $cookie): string => $cookie->name . '=' . rawurlencode($cookie->value),
+                $cookies,
+            ));
+        }
 
         return new Request(
             server: $server,
             query: $query,
             post: $post,
             body: $body,
-            cookies: $this->cookies,
+            cookies: $requestCookies,
             files: $files,
         );
+    }
+
+    /**
+     * The jar's cookies a request to $host and $path carries: longest path first,
+     * then oldest first, as RFC 6265 §5.4 orders the Cookie header.
+     *
+     * @return list<JarCookie>
+     */
+    private function cookiesFor(
+        string $host,
+        string $path,
+        bool $secure,
+    ): array {
+        $cookies = array_values(array_filter(
+            $this->cookies,
+            static fn (JarCookie $cookie): bool => $cookie->matches($host, $path, $secure),
+        ));
+
+        usort($cookies, static fn (JarCookie $a, JarCookie $b): int => strlen($b->path) <=> strlen($a->path));
+
+        return $cookies;
+    }
+
+    /**
+     * The request's host, from the final Host header (port removed, lowercased).
+     *
+     * @param array<string, mixed> $server
+     */
+    private static function requestHost(
+        array $server,
+    ): string {
+        $host = (string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? 'localhost');
+
+        if (str_starts_with($host, '[')) {
+            return strtolower(substr($host, 0, (int) strpos($host, ']') + 1));
+        }
+
+        return strtolower(explode(':', $host, 2)[0]);
+    }
+
+    /**
+     * @param array<string, mixed> $server
+     */
+    private static function isSecureRequest(
+        array $server,
+    ): bool {
+        $https = $server['HTTPS'] ?? '';
+
+        return $https !== '' && strtolower((string) $https) !== 'off';
     }
 
     /**
@@ -589,12 +714,18 @@ class TestClient
     }
 
     /**
-     * Keep the cookies the response sets, and drop the ones it expires, like a browser.
+     * Keep the cookies the response sets, and drop the ones it expires, like a browser
+     * (RFC 6265 §5.3): a cookie without Domain belongs to the request host only, one
+     * without Path gets the request's default path, and one whose Domain does not cover
+     * the request host is ignored. A set or expired cookie replaces only the jar entry
+     * with the same name, domain and path, plus a withCookie() entry of that name and
+     * path that applies to any host.
      *
      * @throws ContainerExceptionInterface
      */
     private function storeCookies(
         Response $response,
+        Request $request,
     ): void {
         $cookies = $response->cookies();
 
@@ -603,14 +734,52 @@ class TestClient
         }
 
         $now = $this->now();
+        $host = self::requestHost(['HTTP_HOST' => $request->server('HTTP_HOST') ?? 'localhost']);
 
         foreach ($cookies as $cookie) {
-            if (self::isExpired($cookie, $now)) {
-                unset($this->cookies[$cookie->name()]);
-            } else {
-                $this->cookies[$cookie->name()] = $cookie->value();
+            $domain = (string) $cookie->domain();
+            $hostOnly = $domain === '';
+            $domain = $hostOnly ? $host : self::normalizeDomain($domain);
+
+            if (!$hostOnly && !JarCookie::domainMatches($host, $domain)) {
+                continue;
             }
+
+            $path = (string) $cookie->path();
+            $path = str_starts_with($path, '/') ? $path : JarCookie::defaultPath($request->path());
+            $key = self::cookieKey($cookie->name(), $domain, $path);
+
+            unset($this->cookies[self::cookieKey($cookie->name(), null, $path)]);
+
+            if (self::isExpired($cookie, $now)) {
+                unset($this->cookies[$key]);
+
+                continue;
+            }
+
+            $this->cookies[$key] = new JarCookie(
+                name: $cookie->name(),
+                value: $cookie->value(),
+                domain: $domain,
+                path: $path,
+                secure: $cookie->secure(),
+                hostOnly: $hostOnly,
+            );
         }
+    }
+
+    private static function cookieKey(
+        string $name,
+        ?string $domain,
+        string $path,
+    ): string {
+        return implode("\n", [$name, $domain ?? '*', $path]);
+    }
+
+    private static function normalizeDomain(
+        string $domain,
+    ): string {
+        return strtolower(ltrim($domain, '.'));
     }
 
     /**
@@ -637,6 +806,75 @@ class TestClient
         $expires = $cookie->expires();
 
         return $expires !== null && $expires !== 0 && $expires <= $now;
+    }
+
+    /**
+     * Split a form field name into its key path: `documents[passport]` is ['documents', 'passport'],
+     * and `photos[]` is ['photos', ''], where '' appends to a list.
+     *
+     * @return non-empty-list<string>
+     * @throws TestClientException
+     */
+    private static function uploadFieldSegments(
+        string $field,
+    ): array {
+        if (preg_match('/^([^\[\]]+)((?:\[[^\[\]]*])*)$/', $field, $matches) !== 1) {
+            throw TestClientException::invalidUploadField($field);
+        }
+
+        preg_match_all('/\[([^\[\]]*)]/', $matches[2], $brackets);
+
+        return [$matches[1], ...$brackets[1]];
+    }
+
+    /**
+     * Put the upload $make() builds at $segments inside $files, the way PHP nests $_FILES.
+     * $make runs only once the slot is known to be free, so a rejected upload leaves no copy behind.
+     *
+     * @param array<mixed> $files
+     * @param list<string> $segments
+     * @param Closure(): UploadedFile $make
+     * @return array<mixed>
+     * @throws TestClientException
+     */
+    private static function placeUpload(
+        array $files,
+        array $segments,
+        string $field,
+        Closure $make,
+    ): array {
+        $segment = array_shift($segments);
+        $isLeaf = $segments === [];
+
+        if ($segment === '') {
+            $files[] = $isLeaf ? $make() : self::placeUpload([], $segments, $field, $make);
+
+            return $files;
+        }
+
+        $existing = $files[$segment] ?? null;
+
+        if ($isLeaf) {
+            if ($existing instanceof UploadedFile) {
+                throw TestClientException::duplicateUpload($field);
+            }
+
+            if ($existing !== null) {
+                throw TestClientException::conflictingUpload($field);
+            }
+
+            $files[$segment] = $make();
+
+            return $files;
+        }
+
+        if ($existing instanceof UploadedFile) {
+            throw TestClientException::conflictingUpload($field);
+        }
+
+        $files[$segment] = self::placeUpload(is_array($existing) ? $existing : [], $segments, $field, $make);
+
+        return $files;
     }
 
     private static function headerServerKey(
