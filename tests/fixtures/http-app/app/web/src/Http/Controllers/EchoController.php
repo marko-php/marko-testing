@@ -7,6 +7,8 @@ namespace Marko\Testing\Tests\HttpApp\Http\Controllers;
 use JsonException;
 use Marko\Routing\Attributes\Delete;
 use Marko\Routing\Attributes\Get;
+use Marko\Routing\Attributes\Head;
+use Marko\Routing\Attributes\Options;
 use Marko\Routing\Attributes\Patch;
 use Marko\Routing\Attributes\Post;
 use Marko\Routing\Attributes\Put;
@@ -14,8 +16,6 @@ use Marko\Routing\Http\Request;
 use Marko\Routing\Http\Response;
 use Marko\Routing\Http\UploadedFile;
 use Marko\Testing\Tests\HttpApp\RequestCounter;
-use Marko\Testing\Tests\HttpApp\Routing\Head;
-use Marko\Testing\Tests\HttpApp\Routing\Options;
 use RuntimeException;
 
 /**
@@ -75,7 +75,13 @@ class EchoController
                 'HTTP_COOKIE' => $request->server('HTTP_COOKIE'),
                 'SERVER_NAME' => $request->server('SERVER_NAME'),
             ],
-        ]);
+        ])
+            // The router strips the body from every HEAD response, so the
+            // method and URI the controller saw also travel as headers.
+            ->withHeaders([
+                'X-Echo-Method' => $request->method(),
+                'X-Echo-Request-Uri' => (string) $request->server('REQUEST_URI'),
+            ]);
     }
 
     #[Get('/counter')]

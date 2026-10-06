@@ -89,8 +89,17 @@ describe('TestClient verbs', function (): void {
         'patch' => ['patch', 'PATCH'],
         'delete' => ['delete', 'DELETE'],
         'options' => ['options', 'OPTIONS'],
-        'head' => ['head', 'HEAD'],
     ]);
+
+    it('sends HEAD to the HEAD route and returns its headers without a body', function (): void {
+        $response = TestClient::boot(httpAppPath())
+            ->head('/echo')
+            ->assertOk()
+            ->assertHeader('X-Echo-Method', 'HEAD')
+            ->assertHeader('Content-Type', 'application/json');
+
+        expect($response->body())->toBe('');
+    });
 
     it('sends form data for body verbs as Request::post() input, form-encoded', function (string $verb): void {
         TestClient::boot(httpAppPath())
@@ -101,14 +110,21 @@ describe('TestClient verbs', function (): void {
             ->assertJsonPath('query', []);
     })->with(['post', 'put', 'patch', 'delete', 'options']);
 
-    it('sends data for GET and HEAD as the query string', function (string $verb): void {
+    it('sends data for GET as the query string', function (): void {
         TestClient::boot(httpAppPath())
-            ->$verb('/echo', ['page' => '2'])
+            ->get('/echo', ['page' => '2'])
             ->assertJsonPath('query', ['page' => '2'])
             ->assertJsonPath('post', [])
             ->assertJsonPath('server.REQUEST_URI', '/echo?page=2')
             ->assertJsonPath('server.QUERY_STRING', 'page=2');
-    })->with(['get', 'head']);
+    });
+
+    it('sends data for HEAD as the query string', function (): void {
+        TestClient::boot(httpAppPath())
+            ->head('/echo', ['page' => '2'])
+            ->assertHeader('X-Echo-Method', 'HEAD')
+            ->assertHeader('X-Echo-Request-Uri', '/echo?page=2');
+    });
 
     it('parses a query string in the URI and merges data into it', function (): void {
         TestClient::boot(httpAppPath())
@@ -141,6 +157,33 @@ describe('TestClient verbs', function (): void {
             ->assertJsonPath('body', '<xml/>')
             ->assertJsonPath('server.CONTENT_TYPE', 'application/xml')
             ->assertJsonPath('server.CONTENT_LENGTH', '6');
+    });
+});
+
+describe('TestClient router method handling', function (): void {
+    it('serves HEAD from the GET route with the body stripped, like production', function (): void {
+        $response = TestClient::boot(httpAppPath())
+            ->head('/counter')
+            ->assertOk()
+            ->assertHeader('X-Global-Middleware', 'applied');
+
+        expect($response->body())->toBe('');
+    });
+
+    it('answers OPTIONS without an OPTIONS route with an automatic 204 and Allow', function (): void {
+        TestClient::boot(httpAppPath())
+            ->options('/counter')
+            ->assertNoContent()
+            ->assertHeader('Allow', 'GET, HEAD, OPTIONS')
+            ->assertHeader('X-Global-Middleware', 'applied');
+    });
+
+    it('answers a method the path has no route for with 405 and Allow', function (): void {
+        TestClient::boot(httpAppPath())
+            ->post('/counter')
+            ->assertStatus(405)
+            ->assertHeader('Allow', 'GET, HEAD, OPTIONS')
+            ->assertHeader('X-Global-Middleware', 'applied');
     });
 });
 
