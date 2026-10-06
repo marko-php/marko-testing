@@ -11,6 +11,7 @@ use Marko\Authentication\AuthenticatableInterface;
 use Marko\Authentication\AuthManager;
 use Marko\Authentication\Config\AuthConfig;
 use Marko\Authentication\Contracts\GuardInterface;
+use Marko\Clock\SystemClock;
 use Marko\Config\Exceptions\ConfigNotFoundException;
 use Marko\Core\Application;
 use Marko\Core\Contracts\ResettableInterface;
@@ -606,7 +607,7 @@ class TestClient
             'SERVER_PORT' => (string) ($parts['port'] ?? ($secure ? 443 : 80)),
             'HTTP_HOST' => isset($parts['port']) ? "$host:{$parts['port']}" : $host,
             'REMOTE_ADDR' => '127.0.0.1',
-            'REQUEST_TIME' => time(),
+            'REQUEST_TIME' => $this->now(),
             'REQUEST_METHOD' => $method,
             'REQUEST_URI' => $queryString === '' ? $path : "$path?$queryString",
             'QUERY_STRING' => $queryString,
@@ -788,7 +789,7 @@ class TestClient
 
     /**
      * The application's clock when one is bound, so cookie expiry agrees with code that
-     * expires cookies relative to that clock (e.g. SessionMiddleware); the system time otherwise.
+     * expires cookies relative to that clock (e.g. SessionMiddleware); a SystemClock otherwise.
      *
      * @throws ContainerExceptionInterface
      */
@@ -800,7 +801,7 @@ class TestClient
             return $container->get(ClockInterface::class)->now()->getTimestamp();
         }
 
-        return time();
+        return new SystemClock()->now()->getTimestamp();
     }
 
     private static function isExpired(

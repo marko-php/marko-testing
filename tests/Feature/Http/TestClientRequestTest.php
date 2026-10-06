@@ -6,12 +6,16 @@ use Marko\Core\Application;
 use Marko\Core\Contracts\ResettableInterface;
 use Marko\Routing\Http\Response;
 use Marko\Testing\Exceptions\TestClientException;
+use Marko\Testing\Fake\FakeClock;
 use Marko\Testing\Http\TestClient;
 use Marko\Testing\Http\TestResponse;
 use Marko\Testing\Tests\HttpApp\RequestCounter;
 
 use function Marko\Testing\Tests\httpAppPath;
+
 use function Marko\Testing\Tests\removeHttpAppSessions;
+
+use Psr\Clock\ClockInterface;
 
 afterAll(function (): void {
     removeHttpAppSessions();
@@ -97,6 +101,14 @@ describe('TestClient lifecycle', function (): void {
 
     it('returns the router 404 for an unknown route', function (): void {
         TestClient::boot(httpAppPath())->get('/no-such-route')->assertNotFound();
+    });
+
+    it('sets REQUEST_TIME from the application\'s clock', function (): void {
+        $client = TestClient::boot(httpAppPath());
+        $clock = new FakeClock('2026-01-01 12:00:00 UTC');
+        $client->application()->container->instance(ClockInterface::class, $clock);
+
+        $client->get('/echo')->assertJsonPath('server.REQUEST_TIME', (string) $clock->now()->getTimestamp());
     });
 });
 
