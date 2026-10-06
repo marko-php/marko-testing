@@ -20,6 +20,7 @@
     },
     "require-dev": {
         "marko/database": "self.version",
+        "marko/validation": "self.version",
         "pestphp/pest": "^4.0"
     },
     "suggest": {
