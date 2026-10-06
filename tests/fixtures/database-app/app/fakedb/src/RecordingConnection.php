@@ -106,6 +106,11 @@ class RecordingConnection implements ConnectionInterface, TransactionInterface, 
         return $this->driver;
     }
 
+    public function supportsReturning(): bool
+    {
+        return false;
+    }
+
     public function beginTransaction(): void
     {
         $this->record($this->transactionState->level() === 0 ? 'BEGIN' : 'SAVEPOINT');
