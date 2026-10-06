@@ -175,6 +175,21 @@ describe('TestClient verbs', function (): void {
             ->assertJsonPath('server.HTTP_HOST', 'example.test');
     });
 
+    it('sends a relative path over https to localhost', function (): void {
+        TestClient::boot(httpAppPath())
+            ->get('/echo')
+            ->assertJsonPath('server.HTTPS', 'on')
+            ->assertJsonPath('server.SERVER_PORT', '443')
+            ->assertJsonPath('server.HTTP_HOST', 'localhost');
+    });
+
+    it('sends an explicit http:// URL as plain http', function (): void {
+        TestClient::boot(httpAppPath())
+            ->get('http://localhost/echo')
+            ->assertJsonPath('server.HTTPS', null)
+            ->assertJsonPath('server.SERVER_PORT', '80');
+    });
+
     it('sends a raw body with any method via call()', function (): void {
         TestClient::boot(httpAppPath())
             ->call('PUT', '/echo', body: '<xml/>', headers: ['Content-Type' => 'application/xml'])

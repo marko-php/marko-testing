@@ -53,7 +53,8 @@ use RuntimeException;
  *
  * The cookie jar scopes cookies like a browser (RFC 6265): a request carries
  * only the cookies whose path and domain match it, and Secure cookies only
- * over HTTPS. Requests go to `localhost` unless the URI names a host.
+ * over HTTPS. A relative path such as `/dashboard` goes to `https://localhost`;
+ * a full URL sets the scheme and host (`http://shop.test/cart` is plain HTTP).
  *
  * An exception thrown by a controller or middleware propagates out of the call,
  * so the test shows the real stack trace. HTTP exceptions
@@ -570,7 +571,10 @@ class TestClient
         $path = ($parts['path'] ?? '') === '' ? '/' : $parts['path'];
         parse_str($parts['query'] ?? '', $query);
         $host = $parts['host'] ?? 'localhost';
-        $secure = ($parts['scheme'] ?? 'http') === 'https';
+        // A relative path goes to https://localhost, as a production app is served over
+        // HTTPS: Secure cookies such as the default session cookie round-trip. Only an
+        // explicit http:// URL is plain HTTP.
+        $secure = strtolower($parts['scheme'] ?? 'https') === 'https';
 
         $post = [];
         $files = [];

@@ -74,6 +74,8 @@ class EchoController
                 'HTTP_HOST' => $request->server('HTTP_HOST'),
                 'HTTP_COOKIE' => $request->server('HTTP_COOKIE'),
                 'SERVER_NAME' => $request->server('SERVER_NAME'),
+                'SERVER_PORT' => $request->server('SERVER_PORT'),
+                'HTTPS' => $request->server('HTTPS'),
             ],
         ])
             // The router strips the body from every HEAD response, so the

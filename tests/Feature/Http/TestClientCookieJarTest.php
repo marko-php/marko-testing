@@ -126,9 +126,18 @@ describe('TestClient cookie jar scoping', function (): void {
         );
 
         $client->get('http://localhost/jar/x')->assertJsonPath('cookies', []);
-        $client->get('/jar/x')->assertJsonPath('cookies', []);
         $client->get('https://localhost/jar/x')->assertJsonPath('cookies', ['secret' => 's']);
     });
+
+    it(
+        'sends relative-path requests over https, so a Secure cookie survives a relative round trip',
+        function (): void {
+            $client = TestClient::boot(httpAppPath());
+            $client->get('/jar/set', ['name' => 'secret', 'value' => 's', 'path' => '/', 'secure' => '1']);
+
+            $client->get('/jar/x')->assertJsonPath('cookies', ['secret' => 's']);
+        },
+    );
 
     it('treats the request as secure when HTTPS is set via withServerVariables', function (): void {
         $client = TestClient::boot(httpAppPath());
@@ -138,8 +147,17 @@ describe('TestClient cookie jar scoping', function (): void {
         );
 
         $client->withServerVariables(['HTTPS' => 'on'])
-            ->get('/jar/x')
+            ->get('http://localhost/jar/x')
             ->assertJsonPath('cookies', ['secret' => 's']);
+    });
+
+    it('treats a relative-path request as plain http when HTTPS is off via withServerVariables', function (): void {
+        $client = TestClient::boot(httpAppPath());
+        $client->get('/jar/set', ['name' => 'secret', 'value' => 's', 'path' => '/', 'secure' => '1']);
+
+        $client->withServerVariables(['HTTPS' => 'off'])
+            ->get('/jar/x')
+            ->assertJsonPath('cookies', []);
     });
 
     it('removes an expired cookie only for its own name, domain and path', function (): void {
@@ -241,8 +259,8 @@ describe('TestClient cookie jar scoping', function (): void {
     it('sends a Secure cookie added with withCookie over https only', function (): void {
         $client = TestClient::boot(httpAppPath())->withCookie('secret', 's', secure: true);
 
-        $client->get('/jar/x')->assertJsonPath('cookies', []);
-        $client->get('https://localhost/jar/x')->assertJsonPath('cookies', ['secret' => 's']);
+        $client->get('http://localhost/jar/x')->assertJsonPath('cookies', []);
+        $client->get('/jar/x')->assertJsonPath('cookies', ['secret' => 's']);
     });
 
     it('sends a cookie added with withCookie and a domain only to that domain', function (): void {
