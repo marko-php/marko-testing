@@ -81,8 +81,9 @@ class RecordingConnection implements ConnectionInterface, TransactionInterface, 
     /**
      * @throws RuntimeException
      */
-    public function prepare(string $sql): StatementInterface
-    {
+    public function prepare(
+        string $sql,
+    ): StatementInterface {
         throw new RuntimeException('Not implemented');
     }
 
@@ -145,8 +146,10 @@ class RecordingConnection implements ConnectionInterface, TransactionInterface, 
     /**
      * @throws Throwable
      */
-    public function transaction(callable $callback): mixed
-    {
+    public function transaction(
+        callable $callback,
+        int $attempts = 1,
+    ): mixed {
         $this->beginTransaction();
 
         try {
@@ -162,13 +165,15 @@ class RecordingConnection implements ConnectionInterface, TransactionInterface, 
         return $result;
     }
 
-    public function afterCommit(callable $callback): void
-    {
+    public function afterCommit(
+        callable $callback,
+    ): void {
         $this->transactionState->afterCommit($callback);
     }
 
-    public function afterRollback(callable $callback): void
-    {
+    public function afterRollback(
+        callable $callback,
+    ): void {
         $this->transactionState->afterRollback($callback);
     }
 

@@ -151,8 +151,10 @@ describe('RefreshDatabase', function (): void {
                 return 1;
             }
 
-            public function transaction(callable $callback): mixed
-            {
+            public function transaction(
+                callable $callback,
+                int $attempts = 1,
+            ): mixed {
                 return $callback();
             }
 
