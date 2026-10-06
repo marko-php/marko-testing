@@ -9,6 +9,7 @@
         "marko/clock": "self.version",
         "marko/broadcasting": "self.version",
         "marko/config": "self.version",
+        "marko/encryption": "self.version",
         "marko/mail": "self.version",
         "marko/queue": "self.version",
         "marko/session": "self.version",

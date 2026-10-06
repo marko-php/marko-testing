@@ -66,7 +66,7 @@ afterEach(fn () => $this->refresh->rollback());
 
 ## Available Fakes
 
-`FakeEventDispatcher`, `FakeBroadcaster`, `FakeMailer`, `FakeQueue`, `FakeSession`, `FakeCookieJar`, `FakeLogger`, `FakeConfigRepository`, `FakeAuthenticatable`, `FakeUserProvider`, `FakeGuard`, `FakeHttpClient`, `FakeClock`, `FakeSleeper`, `FakeConfirmationPrompter`
+`FakeEventDispatcher`, `FakeBroadcaster`, `FakeMailer`, `FakeQueue`, `FakeSession`, `FakeCookieJar`, `FakeLogger`, `FakeConfigRepository`, `FakeAuthenticatable`, `FakeUserProvider`, `FakeGuard`, `FakeHttpClient`, `FakeEncryptor`, `FakeClock`, `FakeSleeper`, `FakeConfirmationPrompter`
 
 
 ## Usage
@@ -221,6 +221,21 @@ $service->push($order);
 
 $http->assertSent(fn (RecordedRequest $r) => $r->method === 'POST');
 $http->assertSentCount(1);
+```
+
+### FakeEncryptor
+
+```php
+use Marko\Testing\Fake\FakeEncryptor;
+
+$encryptor = new FakeEncryptor();
+$encrypted = $encryptor->encrypt('123-45-6789', 'users.ssn');
+
+$encryptor->decrypt($encrypted, 'users.ssn');   // '123-45-6789'
+$encryptor->decrypt($encrypted, 'users.email'); // throws DecryptionException: AAD mismatch
+
+$encryptor->assertEncrypted('123-45-6789', 'users.ssn');
+$encryptor->assertDecrypted(aad: 'users.ssn');
 ```
 
 ### KnownDriversValidator
