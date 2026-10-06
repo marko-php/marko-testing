@@ -12,6 +12,11 @@ class FakeSession implements SessionInterface
 {
     public private(set) bool $started = false;
 
+    /**
+     * Whether arm() prepared the session to start on first access.
+     */
+    public private(set) bool $armed = false;
+
     public private(set) bool $regenerated = false;
 
     public private(set) bool $destroyed = false;
@@ -36,6 +41,16 @@ class FakeSession implements SessionInterface
         $this->startedData = $this->data;
     }
 
+    public function arm(): void
+    {
+        $this->armed = true;
+    }
+
+    public function isAvailable(): bool
+    {
+        return $this->started || $this->armed;
+    }
+
     public function isModified(): bool
     {
         return $this->regenerated || $this->data !== $this->startedData;
@@ -44,6 +59,7 @@ class FakeSession implements SessionInterface
     public function discard(): void
     {
         $this->discarded = true;
+        $this->armed = false;
         $this->started = false;
     }
 
@@ -51,6 +67,8 @@ class FakeSession implements SessionInterface
         string $key,
         mixed $default = null,
     ): mixed {
+        $this->startIfArmed();
+
         return $this->data[$key] ?? $default;
     }
 
@@ -58,23 +76,31 @@ class FakeSession implements SessionInterface
         string $key,
         mixed $value,
     ): void {
+        $this->startIfArmed();
+
         $this->data[$key] = $value;
     }
 
     public function has(
         string $key,
     ): bool {
+        $this->startIfArmed();
+
         return array_key_exists($key, $this->data);
     }
 
     public function remove(
         string $key,
     ): void {
+        $this->startIfArmed();
+
         unset($this->data[$key]);
     }
 
     public function clear(): void
     {
+        $this->startIfArmed();
+
         $this->data = [];
     }
 
@@ -83,6 +109,8 @@ class FakeSession implements SessionInterface
      */
     public function all(): array
     {
+        $this->startIfArmed();
+
         return $this->data;
     }
 
@@ -92,6 +120,8 @@ class FakeSession implements SessionInterface
     public function regenerate(
         bool $deleteOldSession = true,
     ): void {
+        $this->startIfArmed();
+
         $this->regenerated = true;
         $this->id = bin2hex(random_bytes(16));
     }
@@ -99,6 +129,7 @@ class FakeSession implements SessionInterface
     public function destroy(): void
     {
         $this->destroyed = true;
+        $this->armed = false;
         $this->data = [];
     }
 
@@ -122,6 +153,8 @@ class FakeSession implements SessionInterface
 
     public function flash(): FlashBag
     {
+        $this->startIfArmed();
+
         if ($this->flashBag === null) {
             $this->flashBag = new FlashBag($this->data);
         }
@@ -132,5 +165,18 @@ class FakeSession implements SessionInterface
     public function save(): void
     {
         $this->saved = true;
+        $this->armed = false;
+    }
+
+    /**
+     * Mirrors Session: an armed session starts on first data access. Unlike
+     * Session, an unarmed fake never throws, so existing tests can use it
+     * without going through the middleware.
+     */
+    private function startIfArmed(): void
+    {
+        if ($this->armed && !$this->started) {
+            $this->start();
+        }
     }
 }
