@@ -155,11 +155,11 @@ describe('TestDatabase', function (): void {
         $database = new TestDatabase(Application::boot(databaseAppPath()));
         /** @var RecordingConnection $connection */
         $connection = $database->connection();
-        $connection->results['SELECT COUNT(*) as count FROM shows'] = [['count' => 2]];
+        $connection->results['SELECT COUNT(*) as count FROM "shows"'] = [['count' => 2]];
 
         $database->seedTable('shows', [['title' => 'One'], ['title' => 'Two']]);
 
         expect($database->getTableRowCount('shows'))->toBe(2)
-            ->and($connection->statements)->toContain('INSERT INTO shows (title) VALUES (?)');
+            ->and($connection->statements)->toContain('INSERT INTO "shows" ("title") VALUES (?)');
     });
 });

@@ -111,6 +111,12 @@ class RecordingConnection implements ConnectionInterface, TransactionInterface, 
         return false;
     }
 
+    public function quoteIdentifier(
+        string $identifier,
+    ): string {
+        return '"' . str_replace('"', '""', $identifier) . '"';
+    }
+
     public function beginTransaction(): void
     {
         $this->record($this->transactionState->level() === 0 ? 'BEGIN' : 'SAVEPOINT');
