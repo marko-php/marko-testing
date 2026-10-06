@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Marko\Testing\Fake;
 
 use Marko\Config\ConfigRepositoryInterface;
+use Marko\Config\ConfigValue;
+use Marko\Config\Exceptions\ConfigException;
 use Marko\Config\Exceptions\ConfigNotFoundException;
 
 class FakeConfigRepository implements ConfigRepositoryInterface
@@ -60,18 +62,24 @@ class FakeConfigRepository implements ConfigRepositoryInterface
         return (string) $this->get($key, $scope);
     }
 
+    /**
+     * @throws ConfigException|ConfigNotFoundException
+     */
     public function getInt(
         string $key,
         ?string $scope = null,
     ): int {
-        return (int) $this->get($key, $scope);
+        return ConfigValue::toInt($key, $this->get($key, $scope));
     }
 
+    /**
+     * @throws ConfigException|ConfigNotFoundException
+     */
     public function getBool(
         string $key,
         ?string $scope = null,
     ): bool {
-        return (bool) $this->get($key, $scope);
+        return ConfigValue::toBool($key, $this->get($key, $scope));
     }
 
     public function getFloat(

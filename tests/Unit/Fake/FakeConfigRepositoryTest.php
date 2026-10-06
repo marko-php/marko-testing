@@ -3,8 +3,28 @@
 declare(strict_types=1);
 
 use Marko\Config\ConfigRepositoryInterface;
+use Marko\Config\Exceptions\ConfigException;
 use Marko\Config\Exceptions\ConfigNotFoundException;
 use Marko\Testing\Fake\FakeConfigRepository;
+
+it('applies the ConfigRepository boolean rules in getBool', function () {
+    $config = new FakeConfigRepository(['flag.off' => 'off', 'flag.yes' => 'yes', 'flag.typo' => 'ture']);
+
+    expect($config->getBool('flag.off'))->toBeFalse()
+        ->and($config->getBool('flag.yes'))->toBeTrue()
+        ->and(fn () => $config->getBool('flag.typo'))
+        ->toThrow(ConfigException::class, 'Configuration key "flag.typo" is not a boolean');
+});
+
+it('applies the ConfigRepository integer rules in getInt', function () {
+    $config = new FakeConfigRepository(['port' => '8080', 'ratio' => '1.5', 'size' => 2.0]);
+
+    expect($config->getInt('port'))->toBe(8080)
+        ->and(fn () => $config->getInt('ratio'))
+        ->toThrow(ConfigException::class, 'Configuration key "ratio" is not an integer')
+        ->and(fn () => $config->getInt('size'))
+        ->toThrow(ConfigException::class, 'Configuration key "size" is not an integer');
+});
 
 it('implements ConfigRepositoryInterface', function () {
     $config = new FakeConfigRepository();
