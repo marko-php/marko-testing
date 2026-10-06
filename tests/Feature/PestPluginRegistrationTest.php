@@ -9,61 +9,112 @@ declare(strict_types=1);
  * autoload.files order and pestphp/pest-plugin's generated vendor/pest-plugins.json
  * are exactly what a user project gets.
  *
+ * The child is a cold boot of the whole monorepo, so it runs once and every test in this
+ * file reads the same result. Paratest hands a whole file to one worker, so that is one
+ * child process per run, with or without --parallel.
+ *
+ * The child is not a paratest worker, so on exit Pest's Only plugin deletes
+ * vendor/pestphp/pest/.temp/only.lock, which the parent run shares. That only matters
+ * while someone has a local ->only(), which never reaches develop, so it is left alone.
+ *
  * @return array{exitCode: int, output: string}
  */
 function runFixturePestProject(): array
 {
+    static $result = null;
+
+    if ($result !== null) {
+        return $result;
+    }
+
     $root = dirname(__DIR__, 4);
     $fixture = 'packages/testing/tests/fixtures/pest-project';
+    // Unique per run: concurrent runs (worktrees, composer test alongside composer ci)
+    // never share a result cache.
+    $cacheDirectory = sys_get_temp_dir() . '/marko-testing-pest-fixture-' . bin2hex(random_bytes(8));
 
     $command = [
         PHP_BINARY,
+        '-d',
+        'memory_limit=2G',
         $root . '/vendor/bin/pest',
         '--configuration=' . $fixture . '/phpunit.xml',
         '--test-directory=' . $fixture . '/tests',
         '--colors=never',
         // Keeps PHPUnit from writing .phpunit.result.cache into the fixture directory.
-        '--cache-directory=' . sys_get_temp_dir() . '/marko-testing-pest-fixture-cache',
+        '--cache-directory=' . $cacheDirectory,
+        '--do-not-cache-result',
     ];
 
-    // A clean environment keeps a parallel parent run (PARATEST, TEST_TOKEN, ...)
-    // from leaking into the child Pest process.
-    $environment = [
-        'PATH' => (string) getenv('PATH'),
-        'HOME' => (string) getenv('HOME'),
-    ];
-
-    $process = proc_open(
-        $command,
-        [1 => ['pipe', 'w'], 2 => ['redirect', 1]],
-        $pipes,
-        $root,
-        $environment,
+    // The parent environment (TMPDIR and the rest) minus the variables that would make the
+    // child believe it is a worker of the parent's parallel run.
+    $environment = array_filter(
+        getenv(),
+        fn (string $value, string $name): bool => !in_array(
+            $name,
+            ['PARATEST', 'TEST_TOKEN', 'UNIQUE_TEST_TOKEN'],
+            true,
+        ) && !str_starts_with($name, 'PEST_PARALLEL'),
+        ARRAY_FILTER_USE_BOTH,
     );
 
-    if (! is_resource($process)) {
-        throw new RuntimeException('Unable to start the fixture Pest process.');
+    try {
+        $process = proc_open(
+            $command,
+            [1 => ['pipe', 'w'], 2 => ['redirect', 1]],
+            $pipes,
+            $root,
+            $environment,
+        );
+
+        if (!is_resource($process)) {
+            throw new RuntimeException('Unable to start the fixture Pest process.');
+        }
+
+        $output = (string) stream_get_contents($pipes[1]);
+        fclose($pipes[1]);
+        $exitCode = proc_close($process);
+    } finally {
+        removeFixturePestCacheDirectory($cacheDirectory);
     }
 
-    $output = (string) stream_get_contents($pipes[1]);
-    fclose($pipes[1]);
-    $exitCode = proc_close($process);
+    $result = ['exitCode' => $exitCode, 'output' => $output];
 
-    return ['exitCode' => $exitCode, 'output' => $output];
+    return $result;
+}
+
+function removeFixturePestCacheDirectory(string $directory): void
+{
+    if (!is_dir($directory)) {
+        return;
+    }
+
+    $entries = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST,
+    );
+
+    foreach ($entries as $entry) {
+        $entry->isDir() ? rmdir($entry->getPathname()) : unlink($entry->getPathname());
+    }
+
+    rmdir($directory);
 }
 
 it('registers toHavePushed in a Pest run whose Pest.php has no require', function (): void {
-    $result = runFixturePestProject();
+    ['exitCode' => $exitCode, 'output' => $output] = runFixturePestProject();
 
-    expect($result['output'])->not->toContain('Call to undefined method Marko\Testing\Fake\FakeQueue::toHavePushed()')
-        ->and($result['output'])->toContain('passes toHavePushed when the job was pushed')
-        ->and($result['exitCode'])->toBe(0, $result['output']);
+    expect(str_contains($output, 'Call to undefined method Marko\Testing\Fake\FakeQueue::toHavePushed()'))
+        ->toBeFalse($output)
+        ->and(str_contains($output, 'passes toHavePushed when the job was pushed'))->toBeTrue($output)
+        ->and($exitCode)->toBe(0, $output);
 });
 
 it('fails toHavePushed with an assertion failure when nothing was pushed', function (): void {
-    $result = runFixturePestProject();
+    ['exitCode' => $exitCode, 'output' => $output] = runFixturePestProject();
 
-    expect($result['output'])->toContain('fails toHavePushed with an assertion failure when nothing was pushed')
-        ->and($result['output'])->toContain('2 passed')
-        ->and($result['exitCode'])->toBe(0, $result['output']);
+    expect(str_contains($output, 'fails toHavePushed with an assertion failure when nothing was pushed'))
+        ->toBeTrue($output)
+        ->and(str_contains($output, '2 passed'))->toBeTrue($output)
+        ->and($exitCode)->toBe(0, $output);
 });
