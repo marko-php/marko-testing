@@ -97,7 +97,7 @@ readonly class TruncateDatabase
         foreach ($container->get(EntityDiscovery::class)->discoverAll(
             $paths->vendor,
             $paths->modules,
-            $paths->app
+            $paths->app,
         ) as $entityClass) {
             $metadata = $metadataFactory->parse($entityClass);
 
