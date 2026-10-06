@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Marko\Testing\KnownDrivers;
 
 use InvalidArgumentException;
-use PHPUnit\Framework\AssertionFailedError;
+use PHPUnit\Framework\Assert;
+use PHPUnit\Framework\ExpectationFailedException;
 use PHPUnit\Framework\SkippedWithMessageException;
 
 class KnownDriversValidator
@@ -28,23 +29,23 @@ class KnownDriversValidator
     }
 
     /**
-     * @throws InvalidArgumentException|AssertionFailedError
+     * @throws InvalidArgumentException|ExpectationFailedException
      */
     public static function assertDocsUrlsResolveToValidPattern(string $knownDriversPath): void
     {
         $drivers = self::readKnownDrivers($knownDriversPath);
 
         foreach (array_keys($drivers) as $packageName) {
-            if (! str_starts_with($packageName, 'marko/')) {
-                throw new AssertionFailedError(
-                    "Driver key '$packageName' does not follow the 'marko/*' prefix pattern.",
-                );
-            }
+            Assert::assertStringStartsWith(
+                'marko/',
+                $packageName,
+                "Driver key '$packageName' does not follow the 'marko/*' prefix pattern.",
+            );
         }
     }
 
     /**
-     * @throws InvalidArgumentException|SkippedWithMessageException|AssertionFailedError
+     * @throws InvalidArgumentException|SkippedWithMessageException|ExpectationFailedException
      */
     public static function assertSkeletonSuggestContainsAll(
         string $knownDriversPath,
@@ -69,17 +70,16 @@ class KnownDriversValidator
         $drivers = self::readKnownDrivers($knownDriversPath);
 
         foreach ($drivers as $packageName => $description) {
-            if (! array_key_exists($packageName, $suggest)) {
-                throw new AssertionFailedError(
-                    "Skeleton suggest is missing known driver '$packageName'.",
-                );
-            }
-
-            if ($suggest[$packageName] !== $description) {
-                throw new AssertionFailedError(
-                    "Skeleton suggest entry for '$packageName' has description '{$suggest[$packageName]}' but expected '$description'.",
-                );
-            }
+            Assert::assertArrayHasKey(
+                $packageName,
+                $suggest,
+                "Skeleton suggest is missing known driver '$packageName'.",
+            );
+            Assert::assertSame(
+                $description,
+                $suggest[$packageName],
+                "Skeleton suggest entry for '$packageName' has description '{$suggest[$packageName]}' but expected '$description'.",
+            );
         }
     }
 }

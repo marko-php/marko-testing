@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Marko\Testing\KnownDrivers\KnownDriversValidator;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\SkippedWithMessageException;
 
@@ -69,6 +70,27 @@ it('asserts skeleton suggest block contains all known drivers with matching desc
 
     expect(fn () => KnownDriversValidator::assertSkeletonSuggestContainsAll($knownDriversPath, $skeletonComposerPath))
         ->not->toThrow(Throwable::class);
+});
+
+it('counts an assertion for every driver it checks against the prefix pattern', function (): void {
+    $drivers = require __DIR__ . '/fixtures/known-drivers.php';
+    $before = Assert::getCount();
+
+    KnownDriversValidator::assertDocsUrlsResolveToValidPattern(__DIR__ . '/fixtures/known-drivers.php');
+
+    expect(Assert::getCount() - $before)->toBeGreaterThanOrEqual(count($drivers));
+});
+
+it('counts assertions for every driver it checks against the skeleton suggest block', function (): void {
+    $drivers = require __DIR__ . '/fixtures/known-drivers.php';
+    $before = Assert::getCount();
+
+    KnownDriversValidator::assertSkeletonSuggestContainsAll(
+        __DIR__ . '/fixtures/known-drivers.php',
+        __DIR__ . '/fixtures/skeleton-with-suggest-composer.json',
+    );
+
+    expect(Assert::getCount() - $before)->toBeGreaterThanOrEqual(count($drivers) * 2);
 });
 
 it('reads driver list from known-drivers.php file', function (): void {
