@@ -69,6 +69,30 @@ describe('TruncateDatabase', function (): void {
         ]);
     });
 
+    it("quotes pgsql table names with the connection's delimiter", function (): void {
+        ['truncate' => $truncate, 'connection' => $connection] = makeTruncateDatabase();
+        $connection->identifierDelimiter = '`';
+
+        withAppEnv('testing', fn () => $truncate->truncate());
+
+        expect($connection->statements)->toBe(['TRUNCATE TABLE `shows`, `venues` RESTART IDENTITY CASCADE']);
+    })->issue(338);
+
+    it("quotes mysql table names with the connection's delimiter", function (): void {
+        ['truncate' => $truncate, 'connection' => $connection] = makeTruncateDatabase();
+        $connection->driver = 'mysql';
+        $connection->identifierDelimiter = '"';
+
+        withAppEnv('testing', fn () => $truncate->truncate());
+
+        expect($connection->statements)->toBe([
+            'SET FOREIGN_KEY_CHECKS = 0',
+            'TRUNCATE TABLE "shows"',
+            'TRUNCATE TABLE "venues"',
+            'SET FOREIGN_KEY_CHECKS = 1',
+        ]);
+    })->issue(338);
+
     it('re-enables foreign key checks on mysql even when a truncate fails', function (): void {
         ['truncate' => $truncate, 'connection' => $connection] = makeTruncateDatabase();
         $connection->driver = 'mysql';

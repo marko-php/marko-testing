@@ -34,6 +34,8 @@ class RecordingConnection implements ConnectionInterface, TransactionInterface, 
 
     public string $driver = 'pgsql';
 
+    public ?string $identifierDelimiter = null;
+
     public bool $failRollback = false;
 
     public int $resets = 0;
@@ -111,10 +113,17 @@ class RecordingConnection implements ConnectionInterface, TransactionInterface, 
         return false;
     }
 
+    /**
+     * Quotes like the driver named by $driver (a backtick for mysql, a double quote otherwise), or with
+     * $identifierDelimiter when a test sets it, so a test can tell SQL quoted through the connection from SQL
+     * that picked its own delimiter.
+     */
     public function quoteIdentifier(
         string $identifier,
     ): string {
-        return '"' . str_replace('"', '""', $identifier) . '"';
+        $delimiter = $this->identifierDelimiter ?? ($this->driver === 'mysql' ? '`' : '"');
+
+        return $delimiter . str_replace($delimiter, $delimiter . $delimiter, $identifier) . $delimiter;
     }
 
     public function beginTransaction(): void

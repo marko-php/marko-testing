@@ -68,10 +68,8 @@ readonly class TruncateDatabase
 
         match ($driver) {
             'pgsql' => $connection->execute(
-                'TRUNCATE TABLE ' . implode(', ', array_map(
-                    static fn (string $table): string => '"' . $table . '"',
-                    $tables,
-                )) . ' RESTART IDENTITY CASCADE',
+                'TRUNCATE TABLE ' . implode(', ', array_map($connection->quoteIdentifier(...), $tables))
+                . ' RESTART IDENTITY CASCADE',
             ),
             'mysql' => $this->truncateMySql($tables),
             default => throw DatabaseTestException::unsupportedDriver($driver),
@@ -132,7 +130,7 @@ readonly class TruncateDatabase
 
         try {
             foreach ($tables as $table) {
-                $connection->execute('TRUNCATE TABLE `' . $table . '`');
+                $connection->execute('TRUNCATE TABLE ' . $connection->quoteIdentifier($table));
             }
         } finally {
             $connection->execute('SET FOREIGN_KEY_CHECKS = 1');

@@ -65,7 +65,7 @@ describe('TestDatabase', function (): void {
         $connection = $first->connection();
         $createTable = array_filter(
             $connection->statements,
-            fn (string $sql): bool => str_contains($sql, 'CREATE TABLE IF NOT EXISTS migrations'),
+            fn (string $sql): bool => str_contains($sql, 'CREATE TABLE IF NOT EXISTS "migrations"'),
         );
 
         expect($second)->toBe($first)
