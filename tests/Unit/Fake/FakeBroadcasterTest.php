@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Marko\Broadcasting\BroadcastableInterface;
 use Marko\Broadcasting\BroadcasterInterface;
 use Marko\Broadcasting\Channel;
+use Marko\Broadcasting\PresenceChannel;
 use Marko\Broadcasting\PrivateChannel;
 use Marko\Testing\Exceptions\AssertionFailedException;
 use Marko\Testing\Fake\FakeBroadcaster;
@@ -143,5 +144,25 @@ describe('FakeBroadcaster', function (): void {
         $broadcaster->clear();
 
         expect($broadcaster->broadcasts)->toBeEmpty();
+    });
+
+    it('distinguishes presence channels from private channels with the same name', function (): void {
+        $presence = new FakeBroadcaster();
+        $presence->broadcast(new PresenceChannel('room.1'), 'joined', []);
+
+        $private = new FakeBroadcaster();
+        $private->broadcast(new PrivateChannel('room.1'), 'joined', []);
+
+        expect($presence->broadcastsOf(new PrivateChannel('room.1'), 'joined'))->toBeEmpty()
+            ->and($presence->broadcastsOf(new PresenceChannel('room.1'), 'joined'))->toHaveCount(1)
+            ->and($private->broadcastsOf(new PresenceChannel('room.1'), 'joined'))->toBeEmpty()
+            ->and($private->broadcastsOf(new PrivateChannel('room.1'), 'joined'))->toHaveCount(1);
+    });
+
+    it('matches a presence channel broadcast by plain string name', function (): void {
+        $broadcaster = new FakeBroadcaster();
+        $broadcaster->broadcast(new PresenceChannel('room.1'), 'joined', []);
+
+        expect($broadcaster->broadcastsOf('room.1', 'joined'))->toHaveCount(1);
     });
 });

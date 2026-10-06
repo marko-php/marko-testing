@@ -44,7 +44,7 @@ class FakeBroadcaster implements BroadcasterInterface
     }
 
     /**
-     * Broadcasts of $event on $channel. A string matches by name; a Channel also matches its privacy.
+     * Broadcasts of $event on $channel. A string matches by name; a Channel also matches its kind (public, private or presence).
      *
      * @return list<array{channel: Channel, event: string, data: array<string, mixed>, id: ?string}>
      */
@@ -56,7 +56,10 @@ class FakeBroadcaster implements BroadcasterInterface
             $this->broadcasts,
             fn (array $entry): bool => $entry['event'] === $event
                 && $entry['channel']->name === ($channel instanceof Channel ? $channel->name : $channel)
-                && (!$channel instanceof Channel || $entry['channel']->isPrivate() === $channel->isPrivate()),
+                && (!$channel instanceof Channel || (
+                    $entry['channel']->isPrivate() === $channel->isPrivate()
+                    && $entry['channel']->isPresence() === $channel->isPresence()
+                )),
         ));
     }
 
