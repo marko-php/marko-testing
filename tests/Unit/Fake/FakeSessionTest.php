@@ -131,3 +131,39 @@ it('FakeSession clears all stored values', function (): void {
     expect($session->all())->toBeEmpty()
         ->and($session->has('key1'))->toBeFalse();
 });
+
+it('FakeSession reports itself unmodified until a value is written', function (): void {
+    $session = new FakeSession();
+    $session->start();
+    $session->get('key');
+
+    expect($session->isModified())->toBeFalse();
+
+    $session->set('key', 'value');
+
+    expect($session->isModified())->toBeTrue();
+});
+
+it('FakeSession reports itself modified after a flash message or regeneration', function (): void {
+    $flashed = new FakeSession();
+    $flashed->start();
+    $flashed->flash()->add('success', 'Saved');
+
+    $regenerated = new FakeSession();
+    $regenerated->start();
+    $regenerated->regenerate();
+
+    expect($flashed->isModified())->toBeTrue()
+        ->and($regenerated->isModified())->toBeTrue();
+});
+
+it('FakeSession records a discard without saving', function (): void {
+    $session = new FakeSession();
+    $session->start();
+
+    $session->discard();
+
+    expect($session->discarded)->toBeTrue()
+        ->and($session->saved)->toBeFalse()
+        ->and($session->started)->toBeFalse();
+});

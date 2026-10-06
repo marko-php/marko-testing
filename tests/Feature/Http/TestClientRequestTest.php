@@ -215,7 +215,7 @@ describe('TestClient router method handling', function (): void {
             ->options('/counter')
             ->assertNoContent()
             ->assertHeader('Allow', 'GET, HEAD, OPTIONS')
-            ->assertHeader('X-Global-Middleware', 'applied');
+            ->assertHeaderMissing('X-Global-Middleware');
     });
 
     it('answers a method the path has no route for with 405 and Allow', function (): void {
@@ -223,7 +223,7 @@ describe('TestClient router method handling', function (): void {
             ->post('/counter')
             ->assertStatus(405)
             ->assertHeader('Allow', 'GET, HEAD, OPTIONS')
-            ->assertHeader('X-Global-Middleware', 'applied');
+            ->assertHeaderMissing('X-Global-Middleware');
     });
 });
 

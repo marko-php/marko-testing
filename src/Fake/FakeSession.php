@@ -18,8 +18,13 @@ class FakeSession implements SessionInterface
 
     public private(set) bool $saved = false;
 
+    public private(set) bool $discarded = false;
+
     /** @var array<string, mixed> */
     private array $data = [];
+
+    /** @var array<string, mixed> */
+    private array $startedData = [];
 
     private string $id = '';
 
@@ -28,6 +33,18 @@ class FakeSession implements SessionInterface
     public function start(): void
     {
         $this->started = true;
+        $this->startedData = $this->data;
+    }
+
+    public function isModified(): bool
+    {
+        return $this->regenerated || $this->data !== $this->startedData;
+    }
+
+    public function discard(): void
+    {
+        $this->discarded = true;
+        $this->started = false;
     }
 
     public function get(
