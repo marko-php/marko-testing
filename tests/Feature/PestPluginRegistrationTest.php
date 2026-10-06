@@ -58,6 +58,11 @@ function runFixturePestProject(): array
         ARRAY_FILTER_USE_BOTH,
     );
 
+    // Keeps test names whole. Once a test takes 0.01s or more (common under parallel load),
+    // Collision prints its duration and truncates the name to fit the terminal width,
+    // which is 80 columns without a TTY, so the long test name loses its end.
+    $environment['COLLISION_IGNORE_DURATION'] = 'true';
+
     try {
         $process = proc_open(
             $command,
