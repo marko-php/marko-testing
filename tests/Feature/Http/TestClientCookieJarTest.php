@@ -2,11 +2,14 @@
 
 declare(strict_types=1);
 
+use Marko\Testing\Fake\FakeClock;
 use Marko\Testing\Http\JarCookie;
 use Marko\Testing\Http\TestClient;
 
 use function Marko\Testing\Tests\httpAppPath;
 use function Marko\Testing\Tests\removeHttpAppSessions;
+
+use Psr\Clock\ClockInterface;
 
 afterAll(function (): void {
     removeHttpAppSessions();
@@ -285,5 +288,269 @@ describe('TestClient cookie jar scoping', function (): void {
 
         expect($client->cookieJar())->toHaveCount(1)
             ->and($client->cookies())->toBe(['locale' => 'nl']);
+    });
+});
+
+/**
+ * A client whose application reads time from a FakeClock, so a test can move past a cookie's expiry.
+ */
+function clientWithFakeClock(
+    FakeClock $clock,
+): TestClient {
+    $client = TestClient::boot(httpAppPath());
+    $client->application()->container->instance(ClockInterface::class, $clock);
+
+    return $client;
+}
+
+describe('TestClient cookie jar expiry', function (): void {
+    it('stops sending a cookie once its Expires passes on the bound clock', function (): void {
+        $clock = new FakeClock('2026-01-01 12:00:00 UTC');
+        $client = clientWithFakeClock($clock);
+        $client->get('/jar/set', ['name' => 'token', 'value' => 't', 'path' => '/', 'expires_in' => '1800']);
+
+        $client->get('/jar/x')->assertJsonPath('cookies', ['token' => 't']);
+        $clock->travel('+1 hour');
+
+        $client->get('/jar/x')->assertJsonPath('cookies', []);
+    });
+
+    it('stops sending a cookie once its Max-Age passes on the bound clock', function (): void {
+        $clock = new FakeClock('2026-01-01 12:00:00 UTC');
+        $client = clientWithFakeClock($clock);
+        $client->get('/jar/set', ['name' => 'token', 'value' => 't', 'path' => '/', 'max_age' => '1800']);
+
+        $clock->travel('+1799 seconds');
+        $client->get('/jar/x')->assertJsonPath('cookies', ['token' => 't']);
+        $clock->travel('+1 second');
+
+        $client->get('/jar/x')->assertJsonPath('cookies', []);
+    });
+
+    it('lets Max-Age win over Expires', function (): void {
+        $clock = new FakeClock('2026-01-01 12:00:00 UTC');
+        $client = clientWithFakeClock($clock);
+        $client->get('/jar/set', [
+            'name' => 'short',
+            'value' => 's',
+            'path' => '/',
+            'expires_in' => '86400',
+            'max_age' => '60',
+        ]);
+        $client->get('/jar/set', [
+            'name' => 'long',
+            'value' => 'l',
+            'path' => '/',
+            'expires_in' => '60',
+            'max_age' => '86400',
+        ]);
+
+        $clock->travel('+1 hour');
+
+        $client->get('/jar/x')->assertJsonPath('cookies', ['long' => 'l']);
+    });
+
+    it('removes a cookie the response sets with Max-Age=0', function (): void {
+        $client = TestClient::boot(httpAppPath());
+        $client->get('/jar/set', ['name' => 'token', 'value' => 't', 'path' => '/']);
+
+        $client->get('/jar/set', ['name' => 'token', 'path' => '/', 'max_age' => '0', 'expires_in' => '3600']);
+
+        expect($client->cookieJar())->toBe([]);
+    });
+
+    it('exposes the expiry in cookieJar, null for a session cookie', function (): void {
+        $clock = new FakeClock('2026-01-01 12:00:00 UTC');
+        $client = clientWithFakeClock($clock);
+        $client->get('/jar/set', ['name' => 'remember', 'value' => 'r', 'path' => '/', 'max_age' => '600']);
+        $client->get('/jar/set', ['name' => 'session', 'value' => 's', 'path' => '/']);
+
+        [$remember, $session] = $client->cookieJar();
+
+        expect($remember->expiresAt)->toBe($clock->now()->getTimestamp() + 600)
+            ->and($session->expiresAt)->toBeNull();
+    });
+
+    it('evicts expired cookies from cookies and cookieJar', function (): void {
+        $clock = new FakeClock('2026-01-01 12:00:00 UTC');
+        $client = clientWithFakeClock($clock);
+        $client->get('/jar/set', ['name' => 'token', 'value' => 't', 'path' => '/', 'max_age' => '60']);
+        $client->get('/jar/set', ['name' => 'locale', 'value' => 'nl', 'path' => '/']);
+
+        $clock->travel('+2 minutes');
+
+        expect($client->cookies())->toBe(['locale' => 'nl'])
+            ->and($client->cookieJar())->toHaveCount(1);
+    });
+
+    it('keeps a cookie whose Expires is past when a positive Max-Age is set', function (): void {
+        $client = clientWithFakeClock(new FakeClock('2026-01-01 12:00:00 UTC'));
+
+        $client->get(
+            '/jar/set',
+            ['name' => 'token', 'value' => 't', 'path' => '/', 'expired' => '1', 'max_age' => '60'],
+        );
+
+        $client->get('/jar/x')->assertJsonPath('cookies', ['token' => 't']);
+    });
+
+    it('removes a cookie the response sets with a negative Max-Age', function (): void {
+        $client = TestClient::boot(httpAppPath());
+        $client->get('/jar/set', ['name' => 'token', 'value' => 't', 'path' => '/']);
+
+        $client->get('/jar/set', ['name' => 'token', 'path' => '/', 'max_age' => '-1']);
+
+        expect($client->cookieJar())->toBe([]);
+    });
+
+    it('keeps treating Expires=0 as a session cookie', function (): void {
+        $client = TestClient::boot(httpAppPath());
+
+        $client->get('/jar/set', ['name' => 'token', 'value' => 't', 'path' => '/', 'expires' => '0']);
+
+        expect($client->cookieJar())->toHaveCount(1)
+            ->and($client->cookieJar()[0]->expiresAt)->toBeNull();
+    });
+});
+
+describe('TestClient cookie jar SameSite', function (): void {
+    beforeEach(function (): void {
+        $this->client = TestClient::boot(httpAppPath());
+
+        foreach (['Strict', 'Lax', 'None'] as $sameSite) {
+            $this->client->get('https://app.example.test/jar/set', [
+                'name' => strtolower($sameSite),
+                'value' => '1',
+                'path' => '/',
+                'secure' => '1',
+                'same_site' => $sameSite,
+            ]);
+        }
+
+        $this->client->get('https://app.example.test/jar/set', ['name' => 'unset', 'value' => '1', 'path' => '/']);
+    });
+
+    it('withholds a SameSite=Strict cookie from a cross-site request', function (): void {
+        $this->client->get('https://app.example.test/jar/x', headers: ['Origin' => 'https://evil.test'])
+            ->assertJsonMissingPath('cookies.strict');
+    });
+
+    it('sends a SameSite=Lax cookie on a cross-site GET', function (): void {
+        $this->client->get('https://app.example.test/jar/x', headers: ['Origin' => 'https://evil.test'])
+            ->assertJsonPath('cookies.lax', '1');
+    });
+
+    it('withholds a SameSite=Lax cookie from a cross-site POST', function (): void {
+        $this->client->post('https://app.example.test/jar/x', headers: ['Origin' => 'https://evil.test'])
+            ->assertJsonMissingPath('cookies.lax');
+    });
+
+    it('sends SameSite=None and SameSite-less cookies on a cross-site POST', function (): void {
+        $this->client->post('https://app.example.test/jar/x', headers: ['Origin' => 'https://evil.test'])
+            ->assertJsonPath('cookies', ['none' => '1', 'unset' => '1']);
+    });
+
+    it('treats an Origin on a subdomain of the same site as same-site', function (): void {
+        $this->client->post('https://app.example.test/jar/x', headers: ['Origin' => 'https://www.example.test'])
+            ->assertJsonPath('cookies', ['strict' => '1', 'lax' => '1', 'none' => '1', 'unset' => '1']);
+    });
+
+    it('treats Sec-Fetch-Site: cross-site as a cross-site request', function (): void {
+        $this->client->get('https://app.example.test/jar/x', headers: ['Sec-Fetch-Site' => 'cross-site'])
+            ->assertJsonPath('cookies', ['lax' => '1', 'none' => '1', 'unset' => '1']);
+    });
+
+    it('sends Strict and Lax cookies on a same-site request', function (): void {
+        $this->client->post('https://app.example.test/jar/x')
+            ->assertJsonPath('cookies', ['strict' => '1', 'lax' => '1', 'none' => '1', 'unset' => '1']);
+    });
+
+    it('compares SameSite case-insensitively and treats unknown values as None', function (): void {
+        $client = TestClient::boot(httpAppPath());
+        $client->get('/jar/set', ['name' => 'strict', 'value' => '1', 'path' => '/', 'same_site' => 'strict']);
+        $client->get('/jar/set', ['name' => 'odd', 'value' => '1', 'path' => '/', 'same_site' => 'Sideways']);
+
+        $client->post('/jar/x', headers: ['Origin' => 'https://evil.test'])
+            ->assertJsonPath('cookies', ['odd' => '1']);
+    });
+
+    it('treats Origin: null as a cross-site request', function (): void {
+        $this->client->get('https://app.example.test/jar/x', headers: ['Origin' => 'null'])
+            ->assertJsonMissingPath('cookies.strict');
+    });
+
+    it('lets Sec-Fetch-Site: same-site win over a cross-site Origin', function (): void {
+        $this->client->post('https://app.example.test/jar/x', headers: [
+            'Origin' => 'https://evil.test',
+            'Sec-Fetch-Site' => 'same-site',
+        ])->assertJsonPath('cookies', ['strict' => '1', 'lax' => '1', 'none' => '1', 'unset' => '1']);
+    });
+
+    it('applies a client-wide Origin set with withHeaders', function (): void {
+        $this->client->withHeaders(['Origin' => 'https://evil.test'])
+            ->post('https://app.example.test/jar/x')
+            ->assertJsonPath('cookies', ['none' => '1', 'unset' => '1']);
+    });
+});
+
+describe('TestClient cookie jar public suffixes', function (): void {
+    it('ignores a Domain=co.uk cookie set by a.example.co.uk', function (): void {
+        $client = TestClient::boot(httpAppPath());
+
+        $client->get('http://a.example.co.uk/jar/set', [
+            'name' => 'evil',
+            'value' => 'e',
+            'path' => '/',
+            'domain' => 'co.uk',
+        ])->assertCookie('evil');
+
+        expect($client->cookieJar())->toBe([]);
+        $client->get('http://other.co.uk/jar/x')->assertJsonPath('cookies', []);
+    });
+
+    it('ignores a Domain=com cookie set by example.com', function (): void {
+        $client = TestClient::boot(httpAppPath());
+
+        $client->get(
+            'http://example.com/jar/set',
+            ['name' => 'evil', 'value' => 'e', 'path' => '/', 'domain' => 'com'],
+        );
+
+        expect($client->cookieJar())->toBe([]);
+    });
+
+    it('stores a cookie for the registrable domain example.co.uk', function (): void {
+        $client = TestClient::boot(httpAppPath());
+
+        $client->get('http://a.example.co.uk/jar/set', [
+            'name' => 'shared',
+            'value' => 's',
+            'path' => '/',
+            'domain' => 'example.co.uk',
+        ]);
+
+        $client->get('http://b.example.co.uk/jar/x')->assertJsonPath('cookies', ['shared' => 's']);
+    });
+
+    it('stores a Domain=localhost cookie from localhost as host-only', function (): void {
+        $client = TestClient::boot(httpAppPath());
+
+        $client->get('/jar/set', ['name' => 'local', 'value' => 'l', 'path' => '/', 'domain' => 'localhost']);
+
+        expect($client->cookieJar())->toHaveCount(1)
+            ->and($client->cookieJar()[0]->hostOnly)->toBeTrue()
+            ->and($client->cookieJar()[0]->domain)->toBe('localhost');
+        $client->get('/jar/x')->assertJsonPath('cookies', ['local' => 'l']);
+    });
+
+    it('leaves an existing withCookie entry alone when a public-suffix cookie is ignored', function (): void {
+        $client = TestClient::boot(httpAppPath())->withCookie('evil', 'kept');
+
+        $client->get(
+            'http://example.com/jar/set',
+            ['name' => 'evil', 'value' => 'e', 'path' => '/', 'domain' => 'com'],
+        );
+
+        expect($client->cookies())->toBe(['evil' => 'kept']);
     });
 });

@@ -300,7 +300,7 @@ KnownDriversValidator::assertSkeletonSuggestContainsAll(
 - `TestClient::boot(string $basePath): self`, `TestClient::forApplication(Application $app): self` — Boot once, serve many requests
 - `get()`, `post()`, `put()`, `patch()`, `delete()`, `options()`, `head()`, `getJson()`, `postJson()`, `putJson()`, `patchJson()`, `deleteJson()`, `call()` — Send a request, return a `TestResponse`
 - `withHeaders()`, `withServerVariables()`, `withCookie()`, `withoutCookies()`, `withFile()`, `withFiles()`, `actingAs($user, ?string $guard = null)` — Client state for later requests
-- `cookies()`, `cookieJar()` — The cookie jar, scoped by path, domain and `Secure` like a browser
+- `cookies()`, `cookieJar()` — The cookie jar, scoped by path, domain, `Secure`, expiry and `SameSite` like a browser
 - `withoutResetting(ResettableInterface ...$services): static` — Services the client must not reset between requests
 
 ### TestDatabase, RefreshDatabase, TruncateDatabase

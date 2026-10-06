@@ -54,7 +54,11 @@ use RuntimeException;
  *
  * The cookie jar scopes cookies like a browser (RFC 6265): a request carries
  * only the cookies whose path and domain match it, and Secure cookies only
- * over HTTPS. A relative path such as `/dashboard` goes to `https://localhost`;
+ * over HTTPS. Cookies expire on the application clock (Max-Age before Expires),
+ * a cross-site request (an Origin from another site, or Sec-Fetch-Site: cross-site)
+ * withholds SameSite=Strict cookies and sends Lax ones on GET only, and a cookie
+ * scoped to a public suffix such as `co.uk` is ignored.
+ * A relative path such as `/dashboard` goes to `https://localhost`;
  * a full URL sets the scheme and host (`http://shop.test/cart` is plain HTTP).
  *
  * An exception thrown by a controller or middleware propagates out of the call,
@@ -224,6 +228,7 @@ class TestClient
      */
     public function cookies(): array
     {
+        $this->evictExpiredCookies();
         $cookies = [];
 
         foreach ($this->cookies as $cookie) {
@@ -236,12 +241,16 @@ class TestClient
     }
 
     /**
-     * Every cookie in the jar with its domain, path and Secure flag, in creation order.
+     * Every unexpired cookie in the jar with its domain, path, Secure flag, expiry and SameSite,
+     * in creation order.
      *
      * @return list<JarCookie>
+     * @throws ContainerExceptionInterface
      */
     public function cookieJar(): array
     {
+        $this->evictExpiredCookies();
+
         return array_values($this->cookies);
     }
 
@@ -630,7 +639,14 @@ class TestClient
         }
 
         $server = [...$server, ...$this->headersNotOverridden($headers), ...$this->serverVariables];
-        $cookies = $this->cookiesFor(self::requestHost($server), $path, self::isSecureRequest($server));
+        $requestHost = self::requestHost($server);
+        $this->evictExpiredCookies();
+        $cookies = $this->cookiesFor(
+            $requestHost,
+            $path,
+            self::isSecureRequest($server),
+            self::isCrossSiteRequest($server, $requestHost) ? $method : null,
+        );
         $requestCookies = [];
 
         foreach ($cookies as $cookie) {
@@ -657,7 +673,8 @@ class TestClient
 
     /**
      * The jar's cookies a request to $host and $path carries: longest path first,
-     * then oldest first, as RFC 6265 §5.4 orders the Cookie header.
+     * then oldest first, as RFC 6265 §5.4 orders the Cookie header. $crossSiteMethod
+     * is the request method when the request is cross-site, which filters by SameSite.
      *
      * @return list<JarCookie>
      */
@@ -665,10 +682,12 @@ class TestClient
         string $host,
         string $path,
         bool $secure,
+        ?string $crossSiteMethod,
     ): array {
         $cookies = array_values(array_filter(
             $this->cookies,
-            static fn (JarCookie $cookie): bool => $cookie->matches($host, $path, $secure),
+            static fn (JarCookie $cookie): bool => $cookie->matches($host, $path, $secure)
+                && ($crossSiteMethod === null || $cookie->allowsCrossSite($crossSiteMethod)),
         ));
 
         usort($cookies, static fn (JarCookie $a, JarCookie $b): int => strlen($b->path) <=> strlen($a->path));
@@ -691,6 +710,36 @@ class TestClient
         }
 
         return strtolower(explode(':', $host, 2)[0]);
+    }
+
+    /**
+     * Whether a browser would treat the request as cross-site, for SameSite. A
+     * `Sec-Fetch-Site` header decides when sent; otherwise an `Origin` header whose site
+     * (registrable domain) differs from $host's, or the opaque `null` origin, makes it
+     * cross-site. Without either header the request is same-site, like a navigation
+     * within the app.
+     *
+     * @param array<string, mixed> $server
+     */
+    private static function isCrossSiteRequest(
+        array $server,
+        string $host,
+    ): bool {
+        if (isset($server['HTTP_SEC_FETCH_SITE'])) {
+            return strtolower((string) $server['HTTP_SEC_FETCH_SITE']) === 'cross-site';
+        }
+
+        if (!isset($server['HTTP_ORIGIN'])) {
+            return false;
+        }
+
+        $originHost = parse_url((string) $server['HTTP_ORIGIN'], PHP_URL_HOST);
+
+        if (!is_string($originHost) || $originHost === '') {
+            return true;
+        }
+
+        return PublicSuffixList::site(strtolower($originHost)) !== PublicSuffixList::site($host);
     }
 
     /**
@@ -742,9 +791,20 @@ class TestClient
         $host = self::requestHost(['HTTP_HOST' => $request->server('HTTP_HOST') ?? 'localhost']);
 
         foreach ($cookies as $cookie) {
-            $domain = (string) $cookie->domain();
+            $domain = $cookie->domain() === null ? '' : self::normalizeDomain($cookie->domain());
+
+            // RFC 6265 §5.3 step 5: a Domain that is a public suffix is ignored, unless it is
+            // the request host itself, which makes the cookie host-only.
+            if ($domain !== '' && PublicSuffixList::isPublicSuffix($domain)) {
+                if ($domain !== $host) {
+                    continue;
+                }
+
+                $domain = '';
+            }
+
             $hostOnly = $domain === '';
-            $domain = $hostOnly ? $host : self::normalizeDomain($domain);
+            $domain = $hostOnly ? $host : $domain;
 
             if (!$hostOnly && !JarCookie::domainMatches($host, $domain)) {
                 continue;
@@ -756,7 +816,9 @@ class TestClient
 
             unset($this->cookies[self::cookieKey($cookie->name(), null, $path)]);
 
-            if (self::isExpired($cookie, $now)) {
+            $expiresAt = self::expiresAt($cookie, $now);
+
+            if ($expiresAt !== null && $expiresAt <= $now) {
                 unset($this->cookies[$key]);
 
                 continue;
@@ -769,8 +831,28 @@ class TestClient
                 path: $path,
                 secure: $cookie->secure(),
                 hostOnly: $hostOnly,
+                expiresAt: $expiresAt,
+                sameSite: $cookie->sameSite(),
             );
         }
+    }
+
+    /**
+     * Drop the cookies whose expiry has passed on the application clock, as a browser does.
+     *
+     * @throws ContainerExceptionInterface
+     */
+    private function evictExpiredCookies(): void
+    {
+        if ($this->cookies === []) {
+            return;
+        }
+
+        $now = $this->now();
+        $this->cookies = array_filter(
+            $this->cookies,
+            static fn (JarCookie $cookie): bool => !$cookie->isExpired($now),
+        );
     }
 
     private static function cookieKey(
@@ -804,13 +886,27 @@ class TestClient
         return new SystemClock()->now()->getTimestamp();
     }
 
-    private static function isExpired(
+    /**
+     * When a cookie the response sets expires, as a Unix timestamp: Max-Age counted from $now wins
+     * over Expires (RFC 6265 §5.3 step 3); null for a session cookie (no expiry, or Expires 0).
+     */
+    private static function expiresAt(
         Cookie $cookie,
         int $now,
-    ): bool {
+    ): ?int {
+        $maxAge = $cookie->maxAge();
+
+        if ($maxAge !== null) {
+            if ($maxAge <= 0) {
+                return $now;
+            }
+
+            return $maxAge > PHP_INT_MAX - $now ? PHP_INT_MAX : $now + $maxAge;
+        }
+
         $expires = $cookie->expires();
 
-        return $expires !== null && $expires !== 0 && $expires <= $now;
+        return $expires === null || $expires === 0 ? null : $expires;
     }
 
     /**

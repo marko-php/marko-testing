@@ -16,6 +16,10 @@ readonly class JarCookie
      *                            null for a cookie added with withCookie() without a domain, sent to any host
      * @param bool $hostOnly true when the response set no Domain attribute: the cookie goes to $domain
      *                       exactly, not to its subdomains
+     * @param int|null $expiresAt the Unix timestamp the cookie expires at, from Max-Age (counted from the
+     *                            client clock when stored) or else Expires; null for a session cookie
+     * @param string|null $sameSite Strict, Lax or None; null when the cookie had no SameSite attribute,
+     *                              which the jar treats like None
      */
     public function __construct(
         public string $name,
@@ -24,7 +28,32 @@ readonly class JarCookie
         public string $path,
         public bool $secure = false,
         public bool $hostOnly = false,
+        public ?int $expiresAt = null,
+        public ?string $sameSite = null,
     ) {}
+
+    /**
+     * Whether the cookie has expired at $now (a Unix timestamp). A session cookie never does.
+     */
+    public function isExpired(
+        int $now,
+    ): bool {
+        return $this->expiresAt !== null && $this->expiresAt <= $now;
+    }
+
+    /**
+     * Whether a cross-site request with $method carries this cookie: never for SameSite=Strict,
+     * only for a top-level GET for SameSite=Lax, always for None or no SameSite at all.
+     */
+    public function allowsCrossSite(
+        string $method,
+    ): bool {
+        return match (strtolower((string) $this->sameSite)) {
+            'strict' => false,
+            'lax' => strtoupper($method) === 'GET',
+            default => true,
+        };
+    }
 
     /**
      * Whether a request to $host, $path, over HTTPS or not, carries this cookie (RFC 6265 §5.4).
