@@ -66,6 +66,22 @@ describe('FakeHttpClient', function (): void {
             ->and(fn () => $http->get('https://c.example.com'))->toThrow(AssertionFailedException::class);
     });
 
+    it('exposes repeated headers of a stubbed response through headerValues', function (): void {
+        $cookies = ['a=1; Expires=Wed, 21 Oct 2026 07:28:00 GMT', 'b=2; Path=/'];
+        $http = new FakeHttpClient();
+        $http->stub('https://sso.example.com/*', new HttpResponse(200, '', headerValues: ['Set-Cookie' => $cookies]));
+
+        expect($http->get('https://sso.example.com/handoff')->headerValues('set-cookie'))->toBe($cookies);
+    });
+
+    it('exposes repeated headers of a queued response through headerValues', function (): void {
+        $cookies = ['a=1; Expires=Wed, 21 Oct 2026 07:28:00 GMT', 'b=2; Path=/'];
+        $http = new FakeHttpClient();
+        $http->queue(new HttpResponse(200, '', headerValues: ['Set-Cookie' => $cookies]));
+
+        expect($http->get('https://sso.example.com/handoff')->headerValues('Set-Cookie'))->toBe($cookies);
+    });
+
     it('prefers a matching stub over the queue', function (): void {
         $http = new FakeHttpClient();
         $http->stub('https://api.example.com/health', new HttpResponse(200, 'ok'));
