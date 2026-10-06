@@ -13,6 +13,9 @@ class FakeUserProvider implements UserProviderInterface
     /** @var array{user: AuthenticatableInterface, token: ?string, expiresAt: ?DateTimeImmutable}|null */
     public private(set) ?array $lastRememberTokenUpdate = null;
 
+    /** @var list<array{user: AuthenticatableInterface, credentials: array<string, mixed>}> */
+    public private(set) array $rehashChecks = [];
+
     /**
      * @param array<int|string, AuthenticatableInterface> $users keyed by identifier
      */
@@ -46,6 +49,19 @@ class FakeUserProvider implements UserProviderInterface
         }
 
         return true;
+    }
+
+    /**
+     * The fake stores no password hashes, so it only records the call.
+     */
+    public function rehashPasswordIfNeeded(
+        AuthenticatableInterface $user,
+        array $credentials,
+    ): void {
+        $this->rehashChecks[] = [
+            'user' => $user,
+            'credentials' => $credentials,
+        ];
     }
 
     public function retrieveByRememberToken(

@@ -71,3 +71,14 @@ it('FakeUserProvider tracks remember token updates', function () {
         ->and($user->getRememberToken())->toBeNull()
         ->and($user->getRememberTokenExpiresAt())->toBeNull();
 });
+
+it('records each password rehash check', function () {
+    $user = new FakeAuthenticatable(id: 1);
+    $provider = new FakeUserProvider(users: [1 => $user]);
+
+    expect($provider->rehashChecks)->toBe([]);
+
+    $provider->rehashPasswordIfNeeded($user, ['password' => 'secret']);
+
+    expect($provider->rehashChecks)->toBe([['user' => $user, 'credentials' => ['password' => 'secret']]]);
+});
