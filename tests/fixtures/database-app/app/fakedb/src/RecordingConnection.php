@@ -24,6 +24,14 @@ class RecordingConnection implements ConnectionInterface, TransactionInterface, 
     /** @var list<string> */
     public array $statements = [];
 
+    /**
+     * Every statement run by any instance in this process, for tests that
+     * cannot reach the connection an application built internally.
+     *
+     * @var list<string>
+     */
+    public static array $allStatements = [];
+
     public string $driver = 'pgsql';
 
     public bool $failRollback = false;
@@ -56,7 +64,7 @@ class RecordingConnection implements ConnectionInterface, TransactionInterface, 
         string $sql,
         array $bindings = [],
     ): array {
-        $this->statements[] = $sql;
+        $this->record($sql);
 
         return $this->results[$sql] ?? [];
     }
@@ -74,7 +82,7 @@ class RecordingConnection implements ConnectionInterface, TransactionInterface, 
             }
         }
 
-        $this->statements[] = $sql;
+        $this->record($sql);
 
         return 1;
     }
@@ -100,7 +108,7 @@ class RecordingConnection implements ConnectionInterface, TransactionInterface, 
 
     public function beginTransaction(): void
     {
-        $this->statements[] = $this->transactionState->level() === 0 ? 'BEGIN' : 'SAVEPOINT';
+        $this->record($this->transactionState->level() === 0 ? 'BEGIN' : 'SAVEPOINT');
         $this->transactionState->begin();
     }
 
@@ -113,7 +121,7 @@ class RecordingConnection implements ConnectionInterface, TransactionInterface, 
             throw TransactionException::notInTransaction();
         }
 
-        $this->statements[] = 'COMMIT';
+        $this->record('COMMIT');
         $this->transactionState->commit();
     }
 
@@ -130,7 +138,7 @@ class RecordingConnection implements ConnectionInterface, TransactionInterface, 
             throw new RuntimeException('server closed the connection');
         }
 
-        $this->statements[] = 'ROLLBACK';
+        $this->record('ROLLBACK');
         $this->transactionState->rollback();
     }
 
@@ -188,5 +196,12 @@ class RecordingConnection implements ConnectionInterface, TransactionInterface, 
     {
         $this->resets++;
         $this->transactionState->clear();
+    }
+
+    private function record(
+        string $sql,
+    ): void {
+        $this->statements[] = $sql;
+        self::$allStatements[] = $sql;
     }
 }

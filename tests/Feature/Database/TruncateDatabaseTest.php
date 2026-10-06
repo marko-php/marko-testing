@@ -104,14 +104,16 @@ describe('TruncateDatabase', function (): void {
         withAppEnv('testing', fn () => $truncate->truncate());
     })->throws(DatabaseTestException::class, 'Cannot truncate while a transaction is open (transaction level 1)');
 
-    it('refuses to truncate in development', function (): void {
-        ['truncate' => $truncate] = makeTruncateDatabase();
+    it('refuses to truncate in staging before running any SQL', function (): void {
+        ['truncate' => $truncate, 'connection' => $connection] = makeTruncateDatabase();
 
-        withAppEnv('development', fn () => $truncate->truncate());
-    })->throws(
-        DatabaseTestException::class,
-        "Refusing to truncate the entity tables in the 'development' environment",
-    );
+        expect(fn () => withAppEnv('staging', fn () => $truncate->truncate()))
+            ->toThrow(
+                DatabaseTestException::class,
+                "Refusing to truncate the entity tables in the 'staging' environment",
+            )
+            ->and($connection->statements)->toBeEmpty();
+    });
 
     it('throws for an unsupported driver', function (): void {
         ['truncate' => $truncate, 'connection' => $connection] = makeTruncateDatabase();

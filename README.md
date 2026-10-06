@@ -62,7 +62,7 @@ beforeEach(function () {
 afterEach(fn () => $this->refresh->rollback());
 ```
 
-`TruncateDatabase` empties the entity tables instead, for code that must see committed data. Both refuse to run in production; set `APP_ENV=testing`. See the [database tests docs](https://marko.build/docs/packages/testing/#database-tests).
+`TruncateDatabase` empties the entity tables instead, for code that must see committed data. Both refuse to run in production, and `TruncateDatabase` runs only in a testing environment (`testing`, `test`); set `APP_ENV=testing`. See the [database tests docs](https://marko.build/docs/packages/testing/#database-tests).
 
 ## Available Fakes
 
@@ -305,7 +305,7 @@ KnownDriversValidator::assertSkeletonSuggestContainsAll(
 
 ### TestDatabase, RefreshDatabase, TruncateDatabase
 
-- `TestDatabase::boot(string $basePath, bool $fresh = false): self` — Boot and migrate once per process; refuses production
+- `TestDatabase::boot(string $basePath, bool $fresh = false): self` — Boot and migrate once per process; refuses production, and `fresh: true` runs only in a testing environment
 - `application()`, `connection()`, `transaction()`, `client()`, `seedTable()`, `getTableRowCount()`, `appliedMigrations()`
 - `new RefreshDatabase(TestDatabase $database)` — `begin()`, `rollback()`, `runAfterCommitCallbacks()`
 - `new TruncateDatabase(TestDatabase $database)` — `truncate()`, `tables()`

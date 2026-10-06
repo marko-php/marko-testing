@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Marko\Testing\Exceptions;
 
+use Marko\Core\Environment\AppEnvironment;
 use Marko\Core\Exceptions\MarkoException;
 
 class DatabaseTestException extends MarkoException
@@ -44,8 +45,10 @@ class DatabaseTestException extends MarkoException
     ): self {
         return new self(
             message: "Refusing to $operation in the '$environment' environment.",
-            context: 'This operation deletes data. It is allowed only outside production and development, so it never wipes a database you work in.',
-            suggestion: 'Set APP_ENV=testing for the test run and point config/database.php at a dedicated test database.',
+            context: 'This operation deletes data. It runs only when APP_ENV is a testing environment ('
+                . implode(', ', AppEnvironment::TESTING_NAMES) . ').',
+            suggestion: 'Set APP_ENV=testing for the test run (MARKO_ENV, when set, takes precedence over APP_ENV) '
+                . 'and point config/database.php at a dedicated test database.',
         );
     }
 

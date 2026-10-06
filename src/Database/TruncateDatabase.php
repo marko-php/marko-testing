@@ -24,8 +24,8 @@ use Throwable;
  *
  * Only tables of discovered #[Table] entities that exist are truncated. The
  * migrations table and tables created only by hand-written migrations are
- * left alone. Identity sequences restart. Refused in production and
- * development, and inside an open transaction.
+ * left alone. Identity sequences restart. Runs only in a testing
+ * environment (testing, test), and never inside an open transaction.
  *
  * ```php
  * beforeEach(function () {

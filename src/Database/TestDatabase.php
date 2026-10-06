@@ -42,7 +42,9 @@ use RuntimeException;
  * per test) or TruncateDatabase (empty the entity tables).
  *
  * It refuses to run in production (an unset APP_ENV counts as production),
- * and throws when marko/database or a driver is missing.
+ * and throws when marko/database or a driver is missing. Operations that
+ * delete data (fresh: true, TruncateDatabase) run only in a testing
+ * environment (testing, test).
  */
 class TestDatabase
 {
@@ -71,7 +73,8 @@ class TestDatabase
      * Boot and migrate the application at $basePath, once per process.
      *
      * With $fresh, every migration is rolled back and re-run on the first boot
-     * (db:rebuild), which deletes all data; this is refused in development too.
+     * (db:rebuild), which deletes all data; this runs only in a testing
+     * environment (testing, test).
      *
      * @throws DatabaseTestException|MigrationException|ModuleException|CircularDependencyException|BindingConflictException|BindingException|PluginException|PreferenceConflictException|EventException|ContainerExceptionInterface|RouteException|RouteConflictException|CommandException|ReflectionException|RuntimeException|DiscoveryCacheException
      */
@@ -102,6 +105,10 @@ class TestDatabase
         $booting = new self($application);
         $booting->assertNotProduction();
 
+        if ($fresh) {
+            $booting->assertDisposable('rebuild the database (fresh: true)');
+        }
+
         $container = $application->container;
 
         if (!$container->has(ConnectionInterface::class) || !$container->has(TransactionInterface::class)) {
@@ -111,7 +118,6 @@ class TestDatabase
         $migrator = $container->get(Migrator::class);
 
         if ($fresh) {
-            $booting->assertDisposable('rebuild the database (fresh: true)');
             $migrator->reset();
         }
 
@@ -214,8 +220,10 @@ class TestDatabase
     }
 
     /**
-     * Refuse an operation that deletes data unless the application runs in an
-     * environment that is neither production nor development (e.g. testing).
+     * Refuse an operation that deletes data unless the application runs in a
+     * testing environment (AppEnvironment::isTesting(): testing, test).
+     * Production, development, staging and any other name are refused: only a
+     * testing environment shows that the database is disposable.
      *
      * @throws DatabaseTestException|ContainerExceptionInterface
      */
@@ -224,7 +232,7 @@ class TestDatabase
     ): void {
         $environment = $this->environment();
 
-        if ($environment->isProduction() || $environment->isDevelopment()) {
+        if (!$environment->isTesting()) {
             throw DatabaseTestException::destructiveInEnvironment($operation, $environment->name());
         }
     }

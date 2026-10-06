@@ -86,11 +86,51 @@ describe('TestDatabase', function (): void {
         withAppEnv('testing', fn () => TestDatabase::boot(databaseAppPath(), fresh: true));
     })->throws(DatabaseTestException::class, 'fresh: true');
 
-    it('refuses destructive operations in development', function (): void {
+    it('allows destructive operations in the testing environments', function (string $environment): void {
         $database = new TestDatabase(Application::boot(databaseAppPath()));
 
-        withAppEnv('local', fn () => $database->assertDisposable('rebuild the database'));
-    })->throws(DatabaseTestException::class, "Refusing to rebuild the database in the 'local' environment");
+        expect(fn () => withAppEnv($environment, fn () => $database->assertDisposable('rebuild the database')))
+            ->not->toThrow(DatabaseTestException::class);
+    })->with([
+        'testing' => ['testing'],
+        'test' => ['test'],
+    ]);
+
+    it('refuses destructive operations outside the testing environments', function (
+        ?string $environment,
+        string $name,
+    ): void {
+        $database = new TestDatabase(Application::boot(databaseAppPath()));
+
+        expect(fn () => withAppEnv($environment, fn () => $database->assertDisposable('rebuild the database')))
+            ->toThrow(DatabaseTestException::class, "Refusing to rebuild the database in the '$name' environment");
+    })->with([
+        'production' => ['production', 'production'],
+        'unset' => [null, 'production'],
+        'local' => ['local', 'local'],
+        'development' => ['development', 'development'],
+        'staging' => ['staging', 'staging'],
+        'qa' => ['qa', 'qa'],
+    ]);
+
+    it('refuses to rebuild the database with fresh: true in staging before running any SQL', function (): void {
+        $booted = new ReflectionProperty(TestDatabase::class, 'booted');
+        $saved = $booted->getValue();
+        $booted->setValue(null, []);
+        RecordingConnection::$allStatements = [];
+
+        try {
+            expect(fn () => withAppEnv('staging', fn () => TestDatabase::boot(databaseAppPath(), fresh: true)))
+                ->toThrow(
+                    DatabaseTestException::class,
+                    "Refusing to rebuild the database (fresh: true) in the 'staging' environment",
+                )
+                ->and(RecordingConnection::$allStatements)->toBeEmpty()
+                ->and($booted->getValue())->toBeEmpty();
+        } finally {
+            $booted->setValue(null, $saved);
+        }
+    });
 
     it('exposes the shared connection as the transaction', function (): void {
         $database = new TestDatabase(Application::boot(databaseAppPath()));
