@@ -66,7 +66,7 @@ afterEach(fn () => $this->refresh->rollback());
 
 ## Available Fakes
 
-`FakeEventDispatcher`, `FakeBroadcaster`, `FakeMailer`, `FakeQueue`, `FakeSession`, `FakeCookieJar`, `FakeLogger`, `FakeConfigRepository`, `FakeAuthenticatable`, `FakeUserProvider`, `FakeGuard`, `FakeHttpClient`, `FakeClock`
+`FakeEventDispatcher`, `FakeBroadcaster`, `FakeMailer`, `FakeQueue`, `FakeSession`, `FakeCookieJar`, `FakeLogger`, `FakeConfigRepository`, `FakeAuthenticatable`, `FakeUserProvider`, `FakeGuard`, `FakeHttpClient`, `FakeClock`, `FakeConfirmationPrompter`
 
 
 ## Usage
