@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Marko\Testing\Fake;
 
+use DateTimeImmutable;
 use Marko\Authentication\AuthenticatableInterface;
 use Marko\Authentication\Contracts\UserProviderInterface;
 
 class FakeUserProvider implements UserProviderInterface
 {
-    /** @var array{user: AuthenticatableInterface, token: ?string}|null */
+    /** @var array{user: AuthenticatableInterface, token: ?string, expiresAt: ?DateTimeImmutable}|null */
     public private(set) ?array $lastRememberTokenUpdate = null;
 
     /**
@@ -63,11 +64,14 @@ class FakeUserProvider implements UserProviderInterface
     public function updateRememberToken(
         AuthenticatableInterface $user,
         ?string $token,
+        ?DateTimeImmutable $expiresAt,
     ): void {
         $this->lastRememberTokenUpdate = [
             'user' => $user,
             'token' => $token,
+            'expiresAt' => $expiresAt,
         ];
         $user->setRememberToken($token);
+        $user->setRememberTokenExpiresAt($expiresAt);
     }
 }

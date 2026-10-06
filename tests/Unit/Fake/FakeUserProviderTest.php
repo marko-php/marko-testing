@@ -56,13 +56,18 @@ it('FakeUserProvider tracks remember token updates', function () {
 
     expect($provider->lastRememberTokenUpdate)->toBeNull();
 
-    $provider->updateRememberToken($user, 'new-token');
+    $expiresAt = new DateTimeImmutable('2030-01-01 00:00:00');
+    $provider->updateRememberToken($user, 'new-token', $expiresAt);
 
-    expect($provider->lastRememberTokenUpdate)->toBe(['user' => $user, 'token' => 'new-token'])
-        ->and($user->getRememberToken())->toBe('new-token');
+    $expected = ['user' => $user, 'token' => 'new-token', 'expiresAt' => $expiresAt];
 
-    $provider->updateRememberToken($user, null);
+    expect($provider->lastRememberTokenUpdate)->toBe($expected)
+        ->and($user->getRememberToken())->toBe('new-token')
+        ->and($user->getRememberTokenExpiresAt())->toBe($expiresAt);
 
-    expect($provider->lastRememberTokenUpdate)->toBe(['user' => $user, 'token' => null])
-        ->and($user->getRememberToken())->toBeNull();
+    $provider->updateRememberToken($user, null, null);
+
+    expect($provider->lastRememberTokenUpdate)->toBe(['user' => $user, 'token' => null, 'expiresAt' => null])
+        ->and($user->getRememberToken())->toBeNull()
+        ->and($user->getRememberTokenExpiresAt())->toBeNull();
 });

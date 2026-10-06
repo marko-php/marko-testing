@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Marko\Testing\Fake;
 
+use DateTimeImmutable;
 use Marko\Authentication\AuthenticatableInterface;
 
 class FakeAuthenticatable implements AuthenticatableInterface
@@ -14,6 +15,7 @@ class FakeAuthenticatable implements AuthenticatableInterface
         private ?string $rememberToken = null,
         private readonly string $identifierName = 'id',
         private readonly string $rememberTokenName = 'remember_token',
+        private ?DateTimeImmutable $rememberTokenExpiresAt = null,
     ) {}
 
     public function getAuthIdentifier(): int|string
@@ -40,6 +42,17 @@ class FakeAuthenticatable implements AuthenticatableInterface
         ?string $token,
     ): void {
         $this->rememberToken = $token;
+    }
+
+    public function getRememberTokenExpiresAt(): ?DateTimeImmutable
+    {
+        return $this->rememberTokenExpiresAt;
+    }
+
+    public function setRememberTokenExpiresAt(
+        ?DateTimeImmutable $expiresAt,
+    ): void {
+        $this->rememberTokenExpiresAt = $expiresAt;
     }
 
     public function getRememberTokenName(): string
