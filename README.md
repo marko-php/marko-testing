@@ -44,6 +44,26 @@ $client->actingAs($user)->get('/dashboard')->assertOk();
 
 Cookies persist across requests like a browser's, so session-backed flows work. Assertions on the returned `TestResponse` throw `AssertionFailedException` with the status and a body excerpt. See the [HTTP tests docs](https://marko.build/docs/packages/testing/#http-tests).
 
+## Database Tests
+
+With `marko/database` and a driver installed, `TestDatabase` boots and migrates your application once per process, and `RefreshDatabase` wraps each test in a transaction that is rolled back afterwards:
+
+```php
+use Marko\Testing\Database\RefreshDatabase;
+use Marko\Testing\Database\TestDatabase;
+
+beforeEach(function () {
+    $this->database = TestDatabase::boot(dirname(__DIR__));
+    $this->refresh = new RefreshDatabase($this->database);
+    $this->refresh->begin();
+    $this->http = $this->database->client(); // shares the test transaction
+});
+
+afterEach(fn () => $this->refresh->rollback());
+```
+
+`TruncateDatabase` empties the entity tables instead, for code that must see committed data. Both refuse to run in production; set `APP_ENV=testing`. See the [database tests docs](https://marko.build/docs/packages/testing/#database-tests).
+
 ## Available Fakes
 
 `FakeEventDispatcher`, `FakeBroadcaster`, `FakeMailer`, `FakeQueue`, `FakeSession`, `FakeCookieJar`, `FakeLogger`, `FakeConfigRepository`, `FakeAuthenticatable`, `FakeUserProvider`, `FakeGuard`, `FakeHttpClient`, `FakeClock`
@@ -280,6 +300,14 @@ KnownDriversValidator::assertSkeletonSuggestContainsAll(
 - `TestClient::boot(string $basePath): self`, `TestClient::forApplication(Application $app): self` — Boot once, serve many requests
 - `get()`, `post()`, `put()`, `patch()`, `delete()`, `options()`, `head()`, `getJson()`, `postJson()`, `putJson()`, `patchJson()`, `deleteJson()`, `call()` — Send a request, return a `TestResponse`
 - `withHeaders()`, `withServerVariables()`, `withCookie()`, `withoutCookies()`, `withFile()`, `actingAs($user, ?string $guard = null)` — Client state for later requests
+- `withoutResetting(ResettableInterface ...$services): static` — Services the client must not reset between requests
+
+### TestDatabase, RefreshDatabase, TruncateDatabase
+
+- `TestDatabase::boot(string $basePath, bool $fresh = false): self` — Boot and migrate once per process; refuses production
+- `application()`, `connection()`, `transaction()`, `client()`, `seedTable()`, `getTableRowCount()`, `appliedMigrations()`
+- `new RefreshDatabase(TestDatabase $database)` — `begin()`, `rollback()`, `runAfterCommitCallbacks()`
+- `new TruncateDatabase(TestDatabase $database)` — `truncate()`, `tables()`
 
 ### TestResponse
 

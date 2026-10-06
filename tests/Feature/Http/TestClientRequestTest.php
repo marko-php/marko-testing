@@ -3,10 +3,12 @@
 declare(strict_types=1);
 
 use Marko\Core\Application;
+use Marko\Core\Contracts\ResettableInterface;
 use Marko\Routing\Http\Response;
 use Marko\Testing\Exceptions\TestClientException;
 use Marko\Testing\Http\TestClient;
 use Marko\Testing\Http\TestResponse;
+use Marko\Testing\Tests\HttpApp\RequestCounter;
 
 use function Marko\Testing\Tests\httpAppPath;
 use function Marko\Testing\Tests\removeHttpAppSessions;
@@ -54,6 +56,29 @@ describe('TestClient lifecycle', function (): void {
 
     it('resets request-scoped state between two requests on one client', function (): void {
         $client = TestClient::boot(httpAppPath());
+
+        $client->get('/counter')->assertSee('count=1');
+        $client->get('/counter')->assertSee('count=1');
+    });
+
+    it('does not reset services passed to withoutResetting between requests', function (): void {
+        $client = TestClient::boot(httpAppPath());
+        $counter = $client->application()->container->get(RequestCounter::class);
+
+        $client->withoutResetting($counter);
+
+        $client->get('/counter')->assertSee('count=1');
+        $client->get('/counter')->assertSee('count=2');
+    });
+
+    it('still resets every other resettable service', function (): void {
+        $client = TestClient::boot(httpAppPath());
+        $client->application()->container->get(RequestCounter::class);
+
+        $client->withoutResetting(new class () implements ResettableInterface
+        {
+            public function reset(): void {}
+        });
 
         $client->get('/counter')->assertSee('count=1');
         $client->get('/counter')->assertSee('count=1');

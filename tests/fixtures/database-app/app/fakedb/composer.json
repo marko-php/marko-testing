@@ -1,0 +1,16 @@
+{
+    "name": "fixture/fakedb",
+    "description": "Fixture app module with an in-memory database driver for the TestDatabase tests",
+    "type": "marko-module",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Marko\\Testing\\Tests\\DatabaseApp\\": "src/"
+        }
+    },
+    "extra": {
+        "marko": {
+            "module": true
+        }
+    }
+}

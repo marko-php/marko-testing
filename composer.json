@@ -18,9 +18,11 @@
         "psr/clock": "^1.0"
     },
     "require-dev": {
+        "marko/database": "self.version",
         "pestphp/pest": "^4.0"
     },
     "suggest": {
+        "marko/database": "Required for TestDatabase, RefreshDatabase and TruncateDatabase (install a driver such as marko/database-pgsql)",
         "pestphp/pest": "Required for the Pest expectations (toHavePushed, toHaveSent, ...); the fakes and their assert*() methods work without it"
     },
     "conflict": {

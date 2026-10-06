@@ -71,3 +71,11 @@ it('has tests directory for tests', function () {
 
     expect(is_dir($testsPath))->toBeTrue();
 });
+
+it('suggests marko/database without requiring it', function () {
+    $composer = json_decode(file_get_contents(dirname(__DIR__) . '/composer.json'), true);
+
+    expect($composer['suggest'])->toHaveKey('marko/database')
+        ->and($composer['require'])->not->toHaveKey('marko/database')
+        ->and($composer['require-dev'])->toHaveKey('marko/database');
+});

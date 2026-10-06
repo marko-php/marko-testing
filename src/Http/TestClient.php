@@ -12,6 +12,7 @@ use Marko\Authentication\Config\AuthConfig;
 use Marko\Authentication\Contracts\GuardInterface;
 use Marko\Config\Exceptions\ConfigNotFoundException;
 use Marko\Core\Application;
+use Marko\Core\Contracts\ResettableInterface;
 use Marko\Core\Exceptions\BindingConflictException;
 use Marko\Core\Exceptions\BindingException;
 use Marko\Core\Exceptions\CircularDependencyException;
@@ -71,6 +72,9 @@ class TestClient
 
     /** @var array<string, UploadedFile> */
     private array $files = [];
+
+    /** @var list<ResettableInterface> */
+    private array $preserved = [];
 
     public function __construct(
         private readonly Application $application,
@@ -159,6 +163,23 @@ class TestClient
     ): static {
         foreach ($cookies as $name => $value) {
             $this->withCookie($name, $value);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Leave these services alone when the client resets request-scoped state
+     * before each request. RefreshDatabase passes the database connection here,
+     * because resetting it would roll back the test transaction.
+     */
+    public function withoutResetting(
+        ResettableInterface ...$services,
+    ): static {
+        foreach ($services as $service) {
+            if (!in_array($service, $this->preserved, true)) {
+                $this->preserved[] = $service;
+            }
         }
 
         return $this;
@@ -447,7 +468,7 @@ class TestClient
         try {
             // Reset before, not after, like the RoadRunner worker: state left by a
             // request that threw must not reach the next one.
-            $this->resetter->reset();
+            $this->resetter->reset(...$this->preserved);
             $response = $this->application->router->handle($request);
         } finally {
             foreach ($files as $file) {
